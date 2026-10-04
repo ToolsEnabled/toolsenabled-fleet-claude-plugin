@@ -1245,7 +1245,22 @@ function createOpenShellAgentHost({
     if (!pending) return null;
     const state = liveOf(node);
     const before = { provider: node.provider, model: node.model, effort: node.effort, threadId: node.threadId };
+    const snapshot = { ...node };
     applyPendingToRecord(node, [pending.when]);
+    // A waiting provider or model change was checked when it was asked for. The
+    // limits may have narrowed since, so it passes the same launch checks as a
+    // resume before any session is relaunched or given the new model; a refused
+    // change is dropped, and the subagent keeps what it had.
+    if (node.provider !== before.provider || node.model !== before.model || before.threadId && !node.threadId) {
+      try { admitLaunch(node, 'Applying the waiting change'); } catch (error) {
+        Object.assign(node, snapshot);
+        node.pending = null;
+        node.statusNote = `A waiting change was dropped: ${String(error.message).slice(0, 300)}`;
+        save();
+        if (pending.when === 'now') throw error;
+        return null;
+      }
+    }
     if (node.provider !== before.provider || before.threadId && !node.threadId) {
       // A new conversation on the other provider, waiting for its next turn.
       await endSession(node, { state: 'stopped' });

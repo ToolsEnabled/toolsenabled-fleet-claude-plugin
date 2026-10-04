@@ -285,7 +285,7 @@
       "depth": 2,
       "control": "toggle",
       "default": false,
-      "consequence": "Off, the default, means Fleet keeps no audit record: no signing key, nothing signed. On, Fleet signs a record of the file reads and writes, commands, ledger changes and task and memory changes it makes, and refuses any of them it cannot record. Turning it off keeps the records already made.",
+      "consequence": "Off, the default, means Fleet keeps no audit record: no signing key, nothing signed. On, Fleet signs a record of the reads and writes of Fleet's own file tools, ledger changes and task and memory changes it makes, and refuses any of them it cannot record. Turning it off keeps the records already made.",
       "capabilities": [
         "A signed record of what Fleet does, which audit.verify can check."
       ],

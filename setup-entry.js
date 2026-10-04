@@ -124,7 +124,18 @@ function sessionRefusal(workspace, { env = process.env, cwd = process.cwd(), hom
   if (realHomes.includes(resolved)) {
     return 'Fleet needs a project folder, not your home folder. Open a project folder in Claude Code and set up Fleet there.';
   }
-  if (within(resolved, session) && realHomes.some(home => home !== resolved && within(home, resolved))) return null;
+  if (within(resolved, session) && realHomes.some(home => home !== resolved && within(home, resolved))) {
+    // A folder above the session's project is for the first setup only. Once Fleet
+    // is set up, a call from the session cannot widen the folder subagents may
+    // write to; to use a wider folder, start Claude Code in it. When the saved
+    // setup cannot be read, the answer is no.
+    let saved;
+    try { saved = require('./project-folder').savedWorkspace(require('./runtime-config').resolveConfig().stateRoot); }
+    catch { return `${workspace} is above this session's project folder, and Fleet could not read its saved setup, so it did not widen it. Start Claude Code in that folder and type ${SETUP_COMMAND}.`; }
+    if (!saved || real(saved) === resolved) return null;
+    return `${workspace} is above this session's project folder, and Fleet is already set up for ${saved}, so it did not widen it. `
+      + `To use a wider folder, start Claude Code there and type ${SETUP_COMMAND}.`;
+  }
   return `${workspace} is not this session's project folder. Fleet sets up the folder this session works in, ${session}, or a folder above it inside your home folder. `
     + `To use another folder, start Claude Code there and type ${SETUP_COMMAND}.`;
 }

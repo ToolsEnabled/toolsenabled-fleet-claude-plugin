@@ -58,7 +58,7 @@ the audit ledger. Those live elsewhere and this procedure does not read or write
 node ~/.claude/plugins/.../toolsenabled-fleet/recover-state.js
 ```
 
-(Use the folder your Fleet plugin is installed in. `/tefleet status` names it.)
+(Use the folder your Fleet plugin is installed in, for example `~/.claude/plugins/cache/toolsenabled/toolsenabled-fleet/<version>/`.)
 
 **2. Stop Fleet.** Close the Claude Code sessions that have Fleet on. The reset refuses to
 run while any session is live, because clearing state under a running Fleet would leave

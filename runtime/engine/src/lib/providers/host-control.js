@@ -715,8 +715,11 @@ function readFileLegacy({ path: target } = {}, dependencies = {}) {
   //
   // THE DESCRIPTOR IS OPENED BEFORE ADMISSION AND READ AFTER IT. Re-opening by
   // pathname once admission resolved left a window in which the checked name
-  // could come to mean a different file; holding the descriptor closes it, and
-  // the link count is asserted on that descriptor rather than on the name.
+  // could come to mean a different file, so the bytes now come from the one
+  // descriptor that was opened and checked. The open itself follows the path
+  // checked a moment earlier; this is the path-level promise, and it does not
+  // stop another process of the same account from swapping the file between
+  // that check and the open.
   const descriptor = fs.openSync(resolved, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
   let opened;
   try {
