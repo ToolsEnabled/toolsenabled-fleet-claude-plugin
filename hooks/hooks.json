@@ -1,0 +1,17 @@
+{
+  "modules": ["./register.tsx"],
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/ledger-hook.js\" --session-start", "timeout": 90 } ] }
+    ],
+    "UserPromptExpansion": [
+      { "matcher": "(^|:)tefleet$", "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/ledger-hook.js\" --expansion", "timeout": 90 } ] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/ledger-hook.js\"", "timeout": 90 } ] }
+    ],
+    "PreToolUse": [
+      { "matcher": "CronCreate|CronUpdate|ScheduleWakeup|RemoteTrigger|SendMessage", "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/schedule-guard.js\"", "timeout": 30 } ] }
+    ]
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "toolsenabled-fleet",
+  "version": "1.7.0",
+  "displayName": "ToolsEnabled Fleet",
+  "description": "Subagents that keep working in parallel, a shared task list, a ledger of rules and questions, and project memory for Claude Code on Linux x86_64.",
+  "author": {
+    "name": "ToolsEnabled, Inc.",
+    "email": "support@toolsenabled.ai"
+  },
+  "homepage": "https://toolsenabled.ai",
+  "repository": "https://github.com/ToolsEnabled/toolsenabled-fleet-claude-plugin",
+  "documentationUrl": "https://github.com/ToolsEnabled/toolsenabled-fleet-claude-plugin/blob/main/README.md",
+  "supportUrl": "https://github.com/ToolsEnabled/toolsenabled-fleet-claude-plugin/issues",
+  "privacyPolicyUrl": "https://github.com/ToolsEnabled/toolsenabled-fleet-claude-plugin/blob/main/PRIVACY.md",
+  "license": "MIT",
+  "keywords": [
+    "agents",
+    "subagents",
+    "multi-agent",
+    "tasks",
+    "memory",
+    "ledger"
+  ],
+  "types": "./types/index.d.ts"
+}

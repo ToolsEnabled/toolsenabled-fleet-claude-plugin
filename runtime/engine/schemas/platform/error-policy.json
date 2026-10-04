@@ -1,0 +1,32 @@
+{
+  "policyVersion": "1.0.0",
+  "policyAuthority": "toolsenabled",
+  "serviceId": "coordinator-error-taxonomy",
+  "globalRetryCeiling": 3,
+  "operationRetryCeilings": {
+    "default": 3,
+    "external-read": 3,
+    "external-write": 2,
+    "local-read": 2,
+    "local-write": 2
+  },
+  "codes": [
+    {"code":"INVALID_REQUEST","classification":"retry-after-input","retryable":false,"defaultRetryAfterMs":null,"safeSummary":"The request is invalid. Update it and try again."},
+    {"code":"POLICY_DENIED","classification":"terminal","retryable":false,"defaultRetryAfterMs":null,"safeSummary":"This action is not permitted by the active policy."},
+    {"code":"APPROVAL_REQUIRED","classification":"retry-after-input","retryable":false,"defaultRetryAfterMs":null,"safeSummary":"This action needs a new valid approval before it can continue."},
+    {"code":"INPUT_REQUIRED","classification":"retry-after-input","retryable":false,"defaultRetryAfterMs":null,"safeSummary":"More required input is needed before this can continue."},
+    {"code":"AUTH_EXPIRED","classification":"retry-after-input","retryable":false,"defaultRetryAfterMs":null,"safeSummary":"The configured sign-in needs to be refreshed by its owner."},
+    {"code":"QUOTA_EXHAUSTED","classification":"retry-after-time","retryable":true,"defaultRetryAfterMs":60000,"safeSummary":"The service quota is temporarily exhausted. Try again later."},
+    {"code":"UNAVAILABLE","classification":"retry-after-time","retryable":true,"defaultRetryAfterMs":5000,"safeSummary":"The required service is temporarily unavailable. Try again later."},
+    {"code":"TIMEOUT","classification":"retry-after-time","retryable":true,"defaultRetryAfterMs":5000,"safeSummary":"The operation did not finish before its safety deadline."},
+    {"code":"MALFORMED_OUTPUT","classification":"terminal","retryable":false,"defaultRetryAfterMs":null,"safeSummary":"The service returned an invalid response and the result was not accepted."},
+    {"code":"VERIFICATION_FAILED","classification":"terminal","retryable":false,"defaultRetryAfterMs":null,"safeSummary":"The result could not be verified and was not accepted."},
+    {"code":"STALE_DATA","classification":"retry-after-input","retryable":false,"defaultRetryAfterMs":null,"safeSummary":"The referenced state is stale. Refresh the request before continuing."},
+    {"code":"RESOURCE_PRESSURE","classification":"retry-after-time","retryable":true,"defaultRetryAfterMs":30000,"safeSummary":"Local resource pressure prevents this operation from running safely right now."},
+    {"code":"INJECTION_DETECTED","classification":"terminal","retryable":false,"defaultRetryAfterMs":null,"safeSummary":"Unsafe untrusted instructions were detected and blocked."},
+    {"code":"SANDBOX_VIOLATION","classification":"terminal","retryable":false,"defaultRetryAfterMs":null,"safeSummary":"The isolated execution boundary rejected this operation."},
+    {"code":"EXTERNAL_CHANGE","classification":"retry-after-input","retryable":false,"defaultRetryAfterMs":null,"safeSummary":"The external state changed. Re-check it before continuing."},
+    {"code":"INTERNAL_ERROR","classification":"terminal","retryable":false,"defaultRetryAfterMs":null,"safeSummary":"The operation stopped safely because of an internal error."},
+    {"code":"OPERATION_CANCELLED","classification":"terminal","retryable":false,"defaultRetryAfterMs":null,"safeSummary":"The operation was cancelled."}
+  ]
+}

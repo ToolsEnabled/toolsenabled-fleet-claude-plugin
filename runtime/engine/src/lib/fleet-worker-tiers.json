@@ -1,0 +1,124 @@
+{
+  "astra": {
+    "provider": "codex",
+    "tier": "premium",
+    "model": "gpt-6-astra",
+    "cliModel": "gpt-6-astra"
+  },
+  "luna": {
+    "provider": "codex",
+    "tier": "cheap",
+    "model": "gpt-5.6-luna",
+    "cliModel": "gpt-5.6-luna",
+    "efforts": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ]
+  },
+  "terra": {
+    "provider": "codex",
+    "tier": "standard",
+    "model": "gpt-5.6-terra",
+    "cliModel": "gpt-5.6-terra"
+  },
+  "sol": {
+    "provider": "codex",
+    "tier": "premium",
+    "model": "gpt-5.6-sol",
+    "cliModel": "gpt-5.6-sol"
+  },
+  "claude-fable": {
+    "provider": "claude",
+    "tier": "cheap",
+    "model": "claude/fable",
+    "cliModel": "fable"
+  },
+  "claude-sonnet": {
+    "provider": "claude",
+    "tier": "standard",
+    "model": "claude/sonnet",
+    "cliModel": "sonnet"
+  },
+  "claude-opus": {
+    "provider": "claude",
+    "tier": "premium",
+    "model": "claude/opus",
+    "cliModel": "opus"
+  },
+  "claude-opus-5-5": {
+    "provider": "claude",
+    "tier": "premium",
+    "model": "claude/claude-opus-5-5",
+    "cliModel": "claude-opus-5-5"
+  },
+  "claude-opus-5": {
+    "provider": "claude",
+    "tier": "premium",
+    "model": "claude/claude-opus-5",
+    "cliModel": "claude-opus-5"
+  },
+  "claude-sonnet-5": {
+    "provider": "claude",
+    "tier": "standard",
+    "model": "claude/claude-sonnet-5",
+    "cliModel": "claude-sonnet-5"
+  },
+  "claude-fable-5-1": {
+    "provider": "claude",
+    "tier": "cheap",
+    "model": "claude/claude-fable-5-1",
+    "cliModel": "claude-fable-5-1"
+  },
+  "claude-fable-5": {
+    "provider": "claude",
+    "tier": "cheap",
+    "model": "claude/claude-fable-5",
+    "cliModel": "claude-fable-5"
+  },
+  "claude-haiku-4-5": {
+    "provider": "claude",
+    "tier": "cheap",
+    "model": "claude/claude-haiku-4-5",
+    "cliModel": "claude-haiku-4-5",
+    "efforts": []
+  },
+  "claude-opus-4-8": {
+    "provider": "claude",
+    "tier": "premium",
+    "model": "claude/claude-opus-4-8",
+    "cliModel": "claude-opus-4-8"
+  },
+  "claude-opus-4-7": {
+    "provider": "claude",
+    "tier": "premium",
+    "model": "claude/claude-opus-4-7",
+    "cliModel": "claude-opus-4-7"
+  },
+  "claude-opus-4-6": {
+    "provider": "claude",
+    "tier": "premium",
+    "model": "claude/claude-opus-4-6",
+    "cliModel": "claude-opus-4-6",
+    "efforts": [
+      "low",
+      "medium",
+      "high",
+      "max"
+    ]
+  },
+  "claude-sonnet-4-6": {
+    "provider": "claude",
+    "tier": "standard",
+    "model": "claude/claude-sonnet-4-6",
+    "cliModel": "claude-sonnet-4-6",
+    "efforts": [
+      "low",
+      "medium",
+      "high",
+      "max"
+    ]
+  }
+}

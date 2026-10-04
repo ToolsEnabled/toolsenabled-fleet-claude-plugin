@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "mode": "autonomous",
+  "killswitchFile": "KILLSWITCH",
+  "audit": {
+    "enabled": true,
+    "jsonlFile": "logs/actions.jsonl",
+    "textFile": "logs/actions.log"
+  },
+  "approvals": {
+    "enabled": true,
+    "externalWrites": true,
+    "actions": [],
+    "timeoutSeconds": 60
+  }
+}

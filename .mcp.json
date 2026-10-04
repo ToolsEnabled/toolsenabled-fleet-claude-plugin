@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "fleet": {
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/mcp-entry.js"
+      ],
+      "env": {
+        "PATH": "${PATH:-}",
+        "HOME": "${HOME:-}",
+        "OPENSHELL_SANDBOX": "${OPENSHELL_SANDBOX:-}",
+        "CLAUDE_CONFIG_DIR": "${CLAUDE_CONFIG_DIR:-}",
+        "CODEX_HOME": "${CODEX_HOME:-}",
+        "SSL_CERT_FILE": "${SSL_CERT_FILE:-}",
+        "NODE_EXTRA_CA_CERTS": "${NODE_EXTRA_CA_CERTS:-}",
+        "REQUESTS_CA_BUNDLE": "${REQUESTS_CA_BUNDLE:-}",
+        "CURL_CA_BUNDLE": "${CURL_CA_BUNDLE:-}",
+        "GIT_SSL_CAINFO": "${GIT_SSL_CAINFO:-}",
+        "TOOLSENABLED_FLEET_STATE_ROOT": "${TOOLSENABLED_FLEET_STATE_ROOT:-}"
+      }
+    }
+  }
+}

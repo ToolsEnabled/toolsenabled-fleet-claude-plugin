@@ -1,0 +1,472 @@
+{
+  "schemaVersion": 1,
+  "titles": {
+    "fleet.tree_width": "Width: subagents each agent may have running at once",
+    "fleet.tree_depth": "Depth: levels of subagents below your session",
+    "fleet.max_declared_agents": "Most agents Fleet's agent list may hold",
+    "fleet.concurrent_shared_writes": "Letting several agents write the same file at once",
+    "capability.tier": "Permission level",
+    "capability.workspace_roots": "Project folder",
+    "agent.tool_approvals": "Asking you to confirm before a consequential tool runs",
+    "agent.task_only_delegation": "Assign work only through tasks",
+    "agent.comms_enabled": "Agent comms",
+    "agent.tool_summary": "Telling each new session which Fleet tools it can use",
+    "agent.agent_api": "Agent API mode",
+    "audit.retention": "How much audit history stays in the active log",
+    "audit.enabled": "Audit",
+    "ledger.verify_history": "Checking the whole task history before each ledger change",
+    "audit.activity": "Tool activity audit",
+    "tools.throughput": "How tool calls from several agents are handled",
+    "agent.subagent_route": "Where a subagent's own subagents go",
+    "agent.tool_mode": "Older name for the Agent API mode",
+    "tools.audit_batch_window_ms": "Activity record batching delay",
+    "tools.audit_batch_size": "Maximum activity records per batch",
+    "tools.policy_enforcement": "Require scoped policy decisions",
+    "agent.task_difficulty_enabled": "Grade task difficulty"
+  },
+  "entries": [
+    {
+      "id": "agent.task_only_delegation",
+      "section": "F",
+      "depth": 1,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Require work assignments and reports to go through tasks. Direct agent messages are refused even when Agent comms is on. Filing, assigning and checking in on tasks keep their role and permission limits.",
+      "capabilities": [
+        "Keep assignments and progress in task records."
+      ],
+      "risks": [
+        "Agents cannot message each other directly while this is on."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/agent-delegation-policy.js, checked before each agent_comms.send_local message.",
+      "applies": "next-call"
+    },
+    {
+      "id": "agent.comms_enabled",
+      "section": "F",
+      "depth": 1,
+      "control": "toggle",
+      "default": true,
+      "consequence": "Allow agents to message each other with agent_comms.send_local. Off refuses new messages and keeps existing messages and task records. Assign work only through tasks takes precedence when it is on.",
+      "capabilities": [
+        "Turn agent-to-agent messages off without turning off task checkpoints."
+      ],
+      "risks": [
+        "With messages off, agents coordinate only through task records."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/agent-delegation-policy.js, checked before each agent_comms.send_local message.",
+      "applies": "next-call"
+    },
+    {
+      "id": "fleet.tree_width",
+      "section": "E",
+      "depth": 4,
+      "control": "number",
+      "capabilities": [
+        "Run more subagents side by side under each agent."
+      ],
+      "risks": [
+        "More subagents at once use more memory and more of your agent CLIs' usage.",
+        "Lowering it keeps existing subagents; a new start, resume or restart is refused while the agent above is at the limit."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/openshell-agent-host.js reads it when a subagent starts, resumes or restarts.",
+      "warningText": "Changes apply to the next subagent started, resumed or restarted; running subagents keep running. More subagents at once use more memory and more of your agent CLIs' usage.",
+      "step": 1,
+      "applies": "next-call",
+      "default": 4,
+      "minimum": 1,
+      "maximum": 64,
+      "unit": "subagents per agent",
+      "consequence": "How many live subagents each agent may have at once. Stopped and finished subagents keep their conversations, can be resumed and do not count. This does not limit how many agents the whole tree may hold."
+    },
+    {
+      "id": "fleet.tree_depth",
+      "section": "E",
+      "depth": 4,
+      "control": "number",
+      "capabilities": [
+        "Let subagents start their own subagents, down to this many levels."
+      ],
+      "risks": [
+        "More levels can multiply the number of subagents and the work they start.",
+        "Lowering it refuses new subagents below the new limit; existing ones keep their conversations."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/openshell-agent-host.js reads it when a subagent starts, resumes or restarts.",
+      "warningText": "Changes apply to the next subagent started, resumed or restarted; running subagents keep running. More levels can multiply the number of subagents and the work they start.",
+      "step": 1,
+      "applies": "next-call",
+      "default": 3,
+      "minimum": 0,
+      "maximum": 16,
+      "unit": "levels below your session",
+      "consequence": "How many levels of subagents may run below your Claude Code session, which is level zero. The default 3 allows subagents, their subagents and one level below those. 0 allows no subagents. Lowering it keeps existing subagents and their conversations; one deeper than the new limit cannot be resumed or restarted."
+    },
+    {
+      "id": "fleet.max_declared_agents",
+      "section": "E",
+      "depth": 4,
+      "control": "number",
+      "default": 64,
+      "consequence": "The most agents Fleet's agent list may hold: 64 by default, and 0 removes the limit. Lowering it keeps existing agents; the list grows again only once it is below the limit. It does not change how many subagents may run at once.",
+      "capabilities": [
+        "Keep an agent list larger than 64."
+      ],
+      "risks": [
+        "A very large agent list takes more memory and time to check.",
+        "Removing the limit leaves every other check on the list in force."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/agent-org.js resolveMaxAgents; src/lib/agent-org-store.js when the agent list is written",
+      "warningText": "The default is 64. This changes only how many agents the list may hold, not how many subagents may run at once. Lowering it does not delete existing agents.",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "step": 1,
+      "unit": "agents",
+      "applies": "next-call"
+    },
+    {
+      "id": "fleet.concurrent_shared_writes",
+      "section": "E",
+      "depth": 4,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Off, the default, lets only one of Fleet's file writes change a given file at a time; the others wait their turn. On lets several agents save the same file through Fleet's file tools at once. When two do, one of them loses its work without any error, and you find out only by noticing that a change is missing.",
+      "capabilities": [
+        "Agents saving the same file through Fleet's file tools do not wait for each other."
+      ],
+      "risks": [
+        "When two agents save the same file at once, one of them loses its work without an error."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/shared-write-guard.js withSharedWrite, used by host.write_file and host.patch_file in src/lib/providers/host-control.js",
+      "warningText": "On lets several agents save the same file through Fleet's file tools at once. When two do, one of them loses its work without an error. Edits made with an agent CLI's own file tools are not part of this check either way."
+    },
+    {
+      "id": "capability.tier",
+      "section": "F",
+      "depth": 1,
+      "control": "readback",
+      "default": "set at install",
+      "consequence": "The permission level Fleet runs at. The plugin runs at the Standard level only: subagents change files only in the project folder. /tefleet setup records the level, and nothing else changes it.",
+      "readOnlyReason": "Read-only: the level comes from machine.json in Fleet's state folder, where /tefleet setup records it. The plugin runs at the Standard level only; to record it again, run /tefleet setup yourself.",
+      "capabilities": [
+        "Subagents can read and change files in the project folder."
+      ],
+      "risks": [
+        "Subagents run as your user, so in the project folder they can change anything Fleet does not protect."
+      ],
+      "derivedFrom": "recorded by /tefleet setup",
+      "enforcedBy": "machine.json tier via src/lib/setup/machine-record.js and src/lib/permission-tier-policy.js, checked when each tool runs in src/lib/tool-registry.js; src/lib/settings.js capabilityBoundaryReadback shows it here and refuses any value stored for it"
+    },
+    {
+      "id": "capability.workspace_roots",
+      "section": "F",
+      "depth": 2,
+      "control": "readback",
+      "default": [],
+      "consequence": "The project folder Fleet serves, recorded by /tefleet setup. Subagents and Fleet's file tools change files only inside it. To use Fleet in another project, run /tefleet setup there.",
+      "readOnlyReason": "Read-only: the folder comes from machine.json in Fleet's state folder, where /tefleet setup records it. To use another project folder, run /tefleet setup yourself in that project.",
+      "capabilities": [
+        "Subagents and Fleet's file tools can read and change the files in this folder."
+      ],
+      "risks": [
+        "Everything in the folder is within reach of subagents, including anything personal stored there."
+      ],
+      "derivedFrom": "recorded by /tefleet setup",
+      "enforcedBy": "machine.json workspaceRoots via src/lib/tool-registry.js confinedWorkspaceRoots, src/lib/permission-tier-policy.js and src/lib/workspace-boundary.js; src/lib/settings.js capabilityBoundaryReadback shows it here and refuses any value stored for it"
+    },
+    {
+      "id": "agent.tool_approvals",
+      "section": "F",
+      "depth": 1,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Choose whether Fleet asks you to confirm tools that support optional confirmation. If Fleet cannot ask, a call that needs confirmation is refused. This does not give access to any other tool, and the permission level still applies.",
+      "capabilities": [
+        "Off, the default: work finishes while you are away, because no tool stops to ask you."
+      ],
+      "risks": [
+        "Off lets consequential tools run without asking, including ones that change files in the project. Fleet keeps a signed record of them only with audit on."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/policy.js requiresApproval() follows the default or a choice you or setup made; a rejected or unreadable value keeps confirmation required. The permission level and reserved actions still apply."
+    },
+    {
+      "id": "agent.task_difficulty_enabled",
+      "section": "F",
+      "depth": 1,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Require easy, medium or hard on each newly filed task. Turning this off keeps the grades already recorded. Tasks filed earlier keep no grade.",
+      "capabilities": [
+        "Record easy, medium or hard on each new task and show it in the ledger."
+      ],
+      "risks": [
+        "Filing a new task without a difficulty is refused while this is on.",
+        "If the saved setting cannot be read, filing tasks is refused until it can."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/task-difficulty.js defines the grades; src/lib/owner-request-store.js reads this setting under the ledger lock when a task is filed.",
+      "applies": "next-call"
+    },
+    {
+      "id": "agent.tool_summary",
+      "section": "F",
+      "depth": 1,
+      "control": "toggle",
+      "default": true,
+      "consequence": "On, each session that connects to Fleet's tools gets a short note at its start saying which Fleet tools it can use at your permission level, built from the tools actually allowed when the session starts. Off, sessions get no note and learn the tools only from their descriptions and from what you name.",
+      "capabilities": [
+        "A new session knows which Fleet tools it can use at your permission level."
+      ],
+      "risks": [
+        "The note goes to the model provider at the start of each session and costs a few hundred tokens."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/mcp-server.js reads it when a session connects and adds the note from src/lib/host-descriptions.js to the session's instructions.",
+      "applies": "next-session"
+    },
+    {
+      "id": "agent.agent_api",
+      "section": "F",
+      "depth": 1,
+      "control": "seg",
+      "default": "Only",
+      "consequence": "Choose which tools new subagents get. Only, the default: Claude Code subagents get Read, Edit and Write in the project plus Fleet's coordination tools, and Codex subagents get Fleet's tools and Codex's own file editing with its shell off. Optimized: the same for Claude Code subagents, and Codex subagents do not start. Enabled: Codex subagents also get Codex's own tools, including its shell in Codex's sandbox with network off; Claude Code subagents get the same as Only. Disabled: no Fleet tools; Claude Code subagents keep Read, Edit and Write in the project and Codex subagents keep Codex's own tools. Subagents already running keep the tools they started with.",
+      "capabilities": [
+        "Choose, for new subagents, between Fleet's tools, Fleet's tools with an agent CLI's own tools, and an agent CLI's own tools alone.",
+        "Fleet's tool calls keep their permission checks and, with audit on, their signed records."
+      ],
+      "risks": [
+        "Only can block a task when Fleet has no tool for something an agent CLI's own tool would do.",
+        "Optimized starts Claude Code subagents only; Codex subagents do not start while it is selected.",
+        "Enabled lets Codex subagents use Codex's own tools, which Fleet's audit does not record.",
+        "Disabled takes Fleet's coordination tools, such as subagents, messages, tasks and the ledger, away from new subagents."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/agent-api-mode.js defines the modes; src/lib/settings.js reconciles stored choices; src/lib/agent-api-policy.js and src/lib/agent-session-confinement.js apply the mode to new Claude Code and Codex subagents.",
+      "applies": "next-session",
+      "options": [
+        "Only",
+        "Optimized",
+        "Enabled",
+        "Disabled"
+      ]
+    },
+    {
+      "id": "agent.subagent_route",
+      "section": "F",
+      "depth": 1,
+      "control": "seg",
+      "default": "Let the assistant decide",
+      "consequence": "Where a subagent started by another agent goes. Fleet subagents always join this project's agent tree, below the agent that started them. Left as it is, the starting agent decides, and a start that would stay off the tree is refused. Never on your tree refuses every subagent start. Always on your tree refuses a start by an agent that is not itself on the tree.",
+      "capabilities": [
+        "Every subagent is on this project's agent tree, where agent.stop and the /fleet pane reach it."
+      ],
+      "risks": [
+        "Never on your tree stops subagents from starting at all.",
+        "Always on your tree refuses a start whenever the agent asking is not itself on the tree."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/agent-subagent-route.js subagentRoute() decides the route, and src/lib/tool-registry.js refuses agent.spawn by name for any route other than the tree. Only a value you or setup chose counts; anything unreadable keeps the default.",
+      "options": [
+        "Always on your tree",
+        "Never on your tree",
+        "Let the assistant decide"
+      ]
+    },
+    {
+      "id": "audit.enabled",
+      "section": "F",
+      "depth": 2,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Off, the default, means Fleet keeps no audit record: no signing key, nothing signed. On, Fleet signs a record of the file reads and writes, commands, ledger changes and task and memory changes it makes, and refuses any of them it cannot record. Turning it off keeps the records already made.",
+      "capabilities": [
+        "A signed record of what Fleet does, which audit.verify can check."
+      ],
+      "risks": [
+        "With audit on, an operation Fleet cannot record is refused, for example when the audit log or its signing key is unavailable.",
+        "The audit log in Fleet's state folder can contain paths, prompts and tool arguments."
+      ],
+      "derivedFrom": "Off by default; only your explicit choice turns it on.",
+      "enforcedBy": "src/lib/runtime-policy.js reads a choice you or setup made; src/lib/operation-audit.js and src/lib/audit.js record before each effect.",
+      "applies": "next-call"
+    },
+    {
+      "id": "ledger.verify_history",
+      "section": "F",
+      "depth": 2,
+      "control": "toggle",
+      "default": false,
+      "consequence": "On, every ledger change, and ledger.read, first checks the whole task history's hash chain. Off checks only that each new entry follows the last one. Existing history is kept either way.",
+      "capabilities": [
+        "Find a damaged or edited task history before the next ledger change."
+      ],
+      "risks": [
+        "A long history makes each ledger change slower.",
+        "While this is on, damage anywhere in the history blocks ledger changes until it is repaired."
+      ],
+      "derivedFrom": "Off by default; only your explicit choice turns it on.",
+      "enforcedBy": "src/lib/runtime-policy.js reads it; src/lib/owner-request-store.js and src/lib/minor-ledger-agent-gate.js check the history when it is on.",
+      "applies": "next-call"
+    },
+    {
+      "id": "audit.activity",
+      "section": "F",
+      "depth": 1,
+      "control": "seg",
+      "options": [
+        "Full",
+        "Essential",
+        "Off"
+      ],
+      "default": "Off",
+      "consequence": "Full records signed success and failure summaries of completed Fleet tool calls. Essential records failure summaries only. Off records neither. It has no effect while audit is off, and it never changes permission checks or the records audit requires. Applies to the next completed call; existing records are kept. Agent CLIs' own tools are not covered.",
+      "capabilities": [
+        "Full gives the most complete history of Fleet tool calls.",
+        "Essential saves the work of recording successful calls and keeps failure summaries.",
+        "Off saves the work of recording summaries and keeps the least history."
+      ],
+      "risks": [
+        "Essential keeps no summary of successful calls; Off also loses failure summaries.",
+        "Summaries not recorded cannot be recovered later. Summary recording is best effort: a failed write is reported and can leave a gap, even in Full."
+      ],
+      "derivedFrom": "Off by default; only your explicit choice changes it.",
+      "enforcedBy": "src/lib/runtime-policy.js reads it, and it stays Off unless audit.enabled is on; src/lib/operation-audit.js capturePolicy() takes a snapshot and src/lib/tool-registry.js auditInvocation() applies it to the optional tool-call summaries only."
+    },
+    {
+      "id": "tools.throughput",
+      "section": "F",
+      "depth": 2,
+      "control": "seg",
+      "options": [
+        "fast",
+        "strict"
+      ],
+      "default": "fast",
+      "consequence": "Fast, the default: tool calls from several agents run side by side. Calls that only read run together; calls that change something keep their order for each agent, so an agent's second change never overtakes its first. Records audit needs are saved before the call answers, in batches, on a helper thread. Strict: one call at a time per agent and one record saved per call, which is slower. Applies to the next call.",
+      "capabilities": [
+        "Many agents can use Fleet's tools at once without waiting on each other."
+      ],
+      "risks": [
+        "Two agents changing the same thing at the same time are ordered by the store they change, not by the order their calls arrived."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/throughput-mode.js reads the row; src/lib/tool-registry.js routes activity records through src/lib/audit-admission.js; src/mcp-server.js selects the dispatch scheduler for incoming calls."
+    },
+    {
+      "id": "audit.retention",
+      "section": "F",
+      "depth": 1,
+      "control": "select",
+      "default": "Newest 10,000 events",
+      "options": [
+        "Newest 10,000 events",
+        "Newest 50,000 events",
+        "Last 30 days",
+        "Last 90 days",
+        "Keep everything"
+      ],
+      "consequence": "Choose how much audit history stays in the active audit log. Older records move to sealed, signed archives in Fleet's state folder; this setting does not delete them. Tool activity audit separately decides which call summaries are recorded.",
+      "capabilities": [
+        "A larger active log keeps more recent history available without opening an archive.",
+        "Keep everything leaves every record in the active log."
+      ],
+      "risks": [
+        "A larger active log takes more disk space and can take longer to verify or search.",
+        "Keep everything has no size limit, so the log grows with recorded activity.",
+        "A smaller active log means opening signed archives to read older records."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/audit-retention.js resolvePreset()/retentionPlan() decide when the live window is over its limit; src/lib/audit.js rollArchiveOnce() moves exactly one event to sealed storage per append and advances the signed boundary inside the same writer transaction that removes it. An unreadable or unknown value resolves to keeping everything, never to a larger deletion."
+    },
+    {
+      "id": "agent.tool_mode",
+      "section": "D",
+      "depth": 1,
+      "control": "select",
+      "default": "ToolsEnabled only",
+      "consequence": "The older name for the Agent API mode, kept so a choice saved by an earlier version still applies. ToolsEnabled only means Only, ToolsEnabled and selected native tools means Optimized, ToolsEnabled and native tools means Enabled, and Native tools only means Disabled. Settings shows the Agent API mode instead.",
+      "capabilities": [
+        "Keeps a tool choice saved by an earlier version working."
+      ],
+      "risks": [
+        "The same as the Agent API mode, which this mirrors."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/agent-api-mode.js maps it to agent.agent_api; src/lib/settings.js reconciles the two; src/lib/tool-mode.js names the values.",
+      "options": [
+        "ToolsEnabled only",
+        "ToolsEnabled and selected native tools",
+        "ToolsEnabled and native tools",
+        "Native tools only"
+      ],
+      "applies": "next-session"
+    },
+    {
+      "id": "tools.audit_batch_window_ms",
+      "section": "D",
+      "depth": 3,
+      "control": "number",
+      "default": 1,
+      "consequence": "Wait this many milliseconds to collect audit records into one batch. A tool still waits for its required record to be saved before it answers.",
+      "capabilities": [
+        "Collect simultaneous activity into fewer writes when many agents are working."
+      ],
+      "risks": [
+        "Longer waits delay the answer to a queued tool call."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/audit-admission.js createAdmissionQueue reads before scheduling each batch",
+      "minimum": 0,
+      "maximum": 25,
+      "step": 1,
+      "unit": "ms",
+      "applies": "next-call"
+    },
+    {
+      "id": "tools.audit_batch_size",
+      "section": "D",
+      "depth": 3,
+      "control": "number",
+      "default": 512,
+      "consequence": "Limit how many audit records share one write. Larger batches reduce overhead when many agents are active.",
+      "capabilities": [
+        "Control how much activity is recorded together during a burst of tool calls."
+      ],
+      "risks": [
+        "Very large batches hold the audit writer longer and can delay other queued calls."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/audit-admission.js createAdmissionQueue reads before draining each batch",
+      "minimum": 1,
+      "maximum": 4096,
+      "step": 1,
+      "unit": "records",
+      "applies": "next-call"
+    },
+    {
+      "id": "tools.policy_enforcement",
+      "section": "D",
+      "depth": 4,
+      "control": "toggle",
+      "default": false,
+      "consequence": "Require a durable scoped policy decision for consequential tool calls. Calls without one are refused. This experimental policy is off by default.",
+      "capabilities": [
+        "Require explicit scoped authorization before an agent makes consequential tool calls."
+      ],
+      "risks": [
+        "An agent without a scoped policy authorization cannot make consequential tool calls."
+      ],
+      "derivedFrom": "built-in product policy",
+      "enforcedBy": "src/lib/p13-setting.js reads the setting; src/lib/tool-registry.js requires a scoped decision when enabled",
+      "applies": "restart",
+      "warningText": "Consequential calls need scoped policy authorization when this is on. Calls without it are refused."
+    }
+  ]
+}

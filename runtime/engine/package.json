@@ -1,0 +1,12 @@
+{
+  "name": "toolsenabled",
+  "version": "1.7.0",
+  "private": true,
+  "license": "MIT",
+  "description": "The runtime of ToolsEnabled Fleet, a plugin that runs in Claude Code.",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "dependencies": {}
+}
