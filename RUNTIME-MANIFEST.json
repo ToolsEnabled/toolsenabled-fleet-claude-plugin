@@ -2,15 +2,15 @@
   "schemaVersion": 1,
   "files": {
     ".claude-plugin/icon.png": {
-      "sha256": "27d398ecdb0687deb090419cae2d48be30acef2daacd52fc1c32c70a5f1a6dc3",
+      "sha256": "7cc8d76e849b255fe15547c87ba3e9692c512bb0f019a156d347b3aa1ba3e8d7",
       "executable": false
     },
     ".claude-plugin/marketplace.json": {
-      "sha256": "5f79d9de14d54cbe380336f7005d881267c4be4252a7feba0f6006d2c4955fc8",
+      "sha256": "aa05f99237d9b8449b26dea64917b9ccd6acc2dc144e7301b14301e7865c71b9",
       "executable": false
     },
     ".claude-plugin/plugin.json": {
-      "sha256": "9f8dc7c61eb6aabbae41bf3bc2a03fec88836066429b963b00f94264585f5a11",
+      "sha256": "546563255ca4dc68bec5b029d9b693af891131eaf4c56ae852975173805f47f2",
       "executable": false
     },
     ".mcp.json": {
@@ -30,7 +30,7 @@
       "executable": false
     },
     "README.md": {
-      "sha256": "4e6b2b978b5b38d116f8cf1bca9338d69e2a9cd305ad20fa045947de907b903e",
+      "sha256": "315d2a0c212bd43933b178733b7ffe203f61a87bc48eaffbf3821342e558b234",
       "executable": false
     },
     "RECOVERY.md": {
@@ -38,7 +38,7 @@
       "executable": false
     },
     "SOURCE-PINS.json": {
-      "sha256": "08b48e4c85e4c9cc200499976239936b3dce2f8cca68bdf50ee3d82eb8d6d036",
+      "sha256": "b6c27ba44306737cbdacd97c8094c5b8504410ccf5076a327347aaf3cdadb972",
       "executable": false
     },
     "commands/tefleet.md": {
@@ -810,7 +810,7 @@
       "executable": false
     },
     "setup-server.js": {
-      "sha256": "f5d1052eb45a39db343bf169d75faaf291949774f27adfba75dad7357c765653",
+      "sha256": "e9a37d9c2949ac1af6ca9d594c0a0a76aa2c5d472d47b41ed5a64860648c269e",
       "executable": false
     },
     "skills/toolsenabled-fleet/SKILL.md": {
