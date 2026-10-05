@@ -28,19 +28,9 @@ function optimizedApiSupport() {
   });
 }
 
-/** Resolve one mode, accepting the former boolean values without rewriting them. */
-function agentApiMode({ valuesPath, env } = {}) {
-  const registry = settingsRegistryModule().loadRegistry();
-  if (!registry.byId.has(AGENT_API_SETTING_ID)) return 'Enabled';
-  const resolved = settingsModule().loadSettings({ registry, valuesPath, env });
-  const mode = normalizeAgentApiMode(resolved.values[AGENT_API_SETTING_ID]);
-  if (!mode || resolved.rejected?.some(item => item.id === '*' || item.id === AGENT_API_SETTING_ID)) {
-    const error = new Error('The agent API mode could not be read. The session was not started.');
-    error.code = 'AGENT_API_MODE_UNAVAILABLE';
-    throw error;
-  }
-  return mode;
-}
+/** The mode every session runs with. All four saved choices gave the same tools, so what is saved is not read:
+ *  it cannot change a session, and a damaged value cannot stop one. */
+function agentApiMode() { return 'Only'; }
 
 // Compatibility name for callers asking whether native tools are restricted.
 function agentApiEnabled(options = {}) { agentApiMode(options); return true; }

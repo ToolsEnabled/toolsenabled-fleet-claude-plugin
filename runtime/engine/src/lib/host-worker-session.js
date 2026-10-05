@@ -10,7 +10,6 @@ const path = require('node:path');
 // would leave the root registration active beside the narrower worker server.
 const SERVER_NAME = 'toolsenabled-fleet-host';
 const APPROVAL_DENIED = 'A native permission request was denied because host workers cannot present approval prompts. Run the needed action through your own CLI session.';
-const MODES = ['Only', 'Optimized', 'Enabled', 'Disabled'];
 const SERVER_ENV = ['HOME', 'CODEX_HOME', 'CLAUDE_CONFIG_DIR', 'XDG_DATA_HOME', 'LOCALAPPDATA',
   'SSL_CERT_FILE', 'NODE_EXTRA_CA_CERTS', 'REQUESTS_CA_BUNDLE', 'CURL_CA_BUNDLE', 'GIT_SSL_CAINFO',
   'HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY', 'https_proxy', 'http_proxy', 'no_proxy'];
@@ -392,6 +391,7 @@ function inspectAcpProfile({ command, args, env, cwd, timeoutMs = 60_000 }) {
   catch { return null; }
 }
 
+// The environment of a running process, as Linux reports it; null when it cannot be read.
 // The real CLI launches run only the absolute program pinned for this tree,
 // never a name looked up again on PATH (see pinnedCli in the launcher below).
 function pinnedCommand(options, name) {
@@ -411,7 +411,6 @@ function createHostWorkerLauncher({ env = process.env, config, workspaceRoot, so
   resumeAcp = options => require('./agent-engine/acp-process').resumeAcpSession(pinnedCommand(options, options.provider)),
   inspectAcp = inspectAcpProfile,
   checkNative = () => require('./host-worker-prerequisite').requireHostWorkerNative(),
-  agentApiMode = () => require('./agent-api-policy').agentApiMode({ env }),
   listCodexMcp = listCodexMcpServers,
   listCodexModels = listCodexModelCatalog,
   resolveCli = name => launchPolicy.resolveAgentCli(name, { env, workspace: workspaceRoot }),
@@ -440,8 +439,7 @@ function createHostWorkerLauncher({ env = process.env, config, workspaceRoot, so
     requireEnabled(config, env);
     if (!PROVIDER_ORDER.includes(spec.provider)) throw refusal('HOST_WORKER_PROVIDER_UNSUPPORTED', 'Choose a listed worker provider.');
     checkNative();
-    const savedApiMode = typeof agentApiMode === 'function' ? agentApiMode() : agentApiMode;
-    if (!MODES.includes(savedApiMode)) throw refusal('AGENT_API_MODE_UNAVAILABLE', 'The saved Agent API mode is unavailable.');
+    // Every subagent gets the same tools; a saved Agent API mode, valid or not, changes and blocks nothing.
     const apiMode = 'Only';
     const command = pinnedCli(spec.provider);
     // The person's standing rules travel outside the task text: Claude's
@@ -458,6 +456,7 @@ function createHostWorkerLauncher({ env = process.env, config, workspaceRoot, so
       const profile = acpProfile(spec.provider);
       if (!profile) throw refusal('HOST_WORKER_PROFILE_UNAVAILABLE', 'The listed ACP worker has no launch profile.');
       pinnedCommand({ command }, spec.provider);
+      const { acpChildEnvironment } = require('./agent-engine/acp-process');
       const withoutOverrides = { ...common.env };
       for (const name of Object.keys(withoutOverrides)) {
         if ((profile.overrides || []).some(listed => listed.toLowerCase() === name.toLowerCase())) delete withoutOverrides[name];
@@ -465,7 +464,7 @@ function createHostWorkerLauncher({ env = process.env, config, workspaceRoot, so
       const unconfined = reason => refusal('HOST_WORKER_AMBIENT_TOOLS',
         `${reason} Nothing was started: ${profile.displayName || spec.provider} subagents run only with Fleet's tools.`);
       // What the CLI would load from the person's own setup, with the isolation switches on.
-      const ambientEnv = { ...withoutOverrides, ...(profile.switches || {}) };
+      const ambientEnv = acpChildEnvironment({ env: withoutOverrides, profileEnv: profile.switches || {}, workspace: workspaceRoot });
       const ambient = profile.inspect ? inspectAcp({ command, args: profile.inspect.config, env: ambientEnv, cwd: workspaceRoot }) : null;
       if (profile.inspect && !ambient) throw unconfined(`${profile.displayName || spec.provider} did not report its configuration.`);
       const prepared = profile.prepare({ nodeFolder: spec.nodeFolder, ambient });
@@ -479,7 +478,8 @@ function createHostWorkerLauncher({ env = process.env, config, workspaceRoot, so
         throw refusal('HOST_WORKER_PROFILE_INVALID', 'ACP profile files and environment must stay inside the private node boundary.');
       }
       for (const { file, text } of prepared.files) writePrivate(file, text, config.stateRoot);
-      const launchEnv = { ...withoutOverrides, ...prepared.env };
+      // The same function builds the environment the CLI is inspected with and the one it runs with.
+      const launchEnv = acpChildEnvironment({ env: withoutOverrides, profileEnv: prepared.env, workspace: workspaceRoot });
       // What the CLI reports with the generated file in place: confirmed, not assumed.
       if (profile.inspect && profile.confirm) {
         const resolved = inspectAcp({ command, args: profile.inspect.config, env: launchEnv, cwd: workspaceRoot });
@@ -490,7 +490,7 @@ function createHostWorkerLauncher({ env = process.env, config, workspaceRoot, so
       }
       const events = acpEvents(spec.onEvent, prepared.toolNamePrefix);
       const options = { ...common, provider: spec.provider, profile, args: prepared.args,
-        env: launchEnv, mcpServers: acpMcpServers(prepared.serverName, entry),
+        env: withoutOverrides, profileEnv: prepared.env, mcpServers: acpMcpServers(prepared.serverName, entry),
         onEvent: events.onEvent, ...(spec.model && spec.model !== 'auto' ? { model: spec.model } : {}) };
       let session;
       try {

@@ -46,6 +46,8 @@ const ACP_PROFILES = Object.freeze({
     // OpenCode advertises one method, which only says to run its own login command.
     authMethodIds: Object.freeze([]),
     switches: OPENCODE_SWITCHES, overrides: OPENCODE_OVERRIDES,
+    // Every variable of this CLI's family that the process may hold is one the launch supplied.
+    family: require('../supervision/launch-environment').environmentFamily('opencode'),
     inspect: Object.freeze({ config: Object.freeze(['debug', 'config']), agent: Object.freeze(['debug', 'agent', 'build']),
       skills: Object.freeze(['debug', 'skill']) }),
     settingsFile: 'opencode.json',

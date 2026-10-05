@@ -354,8 +354,11 @@ function mapSource(error, options = {}) {
   if (options.verificationFailed === true) return 'VERIFICATION_FAILED';
   if (options.timedOut === true) return 'TIMEOUT';
   const code = sourceCode(error);
-  if (code === 'AUDIT_UNAVAILABLE' && plain(error?.details)
-      && own(error.details, 'reason') && error.details.reason === 'AUDIT_SIGNING_KEY_UNAVAILABLE') return 'INPUT_REQUIRED';
+  // An action refused because Fleet could not record it needs a repair (a signing key, a log that fails its
+  // check, a full disk), not a wait. It answers with its own sentence, which names audit.status, and not with
+  // "try again later".
+  if (code === 'AUDIT_UNAVAILABLE' && plain(error?.details) && own(error.details, 'reason') && typeof error.details.reason === 'string'
+      && !/BUSY|LOCKED|TIMEOUT|EAGAIN|EINTR/i.test(error.details.reason)) return 'INPUT_REQUIRED';
   const status = sourceStatus(error);
   const timedOut = Boolean(error) && typeof error === 'object' && own(error, 'timedOut') && error.timedOut === true;
   const head = classifySourceCode(code, status, timedOut, includesCode);

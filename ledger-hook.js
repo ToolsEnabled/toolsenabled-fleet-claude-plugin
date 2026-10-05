@@ -48,9 +48,8 @@ const SETTINGS_USAGE = [
   '/tefleet settings - show the settings',
   '/tefleet settings depth <1-16> - levels of subagents below your session',
   '/tefleet settings width <1-64> - subagents each agent may have running at once',
-  '/tefleet settings providers <CLI ...|all> - agent CLIs subagents may use: claude, codex',
+  '/tefleet settings providers <CLI ...|all> - agent CLIs subagents may use: claude, codex, opencode',
   '/tefleet settings models <model ...|all> - models subagents may use',
-  '/tefleet settings mode <Only|Optimized|Enabled|Disabled> - the Agent API mode, kept for earlier choices: every mode gives subagents the same tools',
   '/tefleet settings audit <on|off> - signed audit of Fleet operations',
   'Several changes can go in one command, for example /tefleet settings depth 2 width 3.',
   CONFIRM_LINE,
@@ -357,9 +356,8 @@ function applyLedger(change, event) {
 // /tefleet settings: the person's own changes, applied here without Claude.
 const SETTING_NAMES = Object.freeze({
   depth: 'depth', width: 'width', providers: 'providers', provider: 'providers', models: 'models', model: 'models',
-  mode: 'apiMode', api: 'apiMode', apimode: 'apiMode', 'api-mode': 'apiMode', 'agent-api': 'apiMode', 'agent-api-mode': 'apiMode', audit: 'audit',
+  audit: 'audit',
 });
-const MODES = Object.freeze(['Only', 'Optimized', 'Enabled', 'Disabled']);
 function parseSettings(rest) {
   const words = rest.split(/[\s,=]+/).filter(Boolean);
   const changes = {};
@@ -372,10 +370,6 @@ function parseSettings(rest) {
     if (name === 'depth' || name === 'width') {
       if (values.length !== 1 || !/^\d{1,3}$/.test(values[0])) return null;
       changes[name] = Number(values[0]);
-    } else if (name === 'apiMode') {
-      const mode = values.length === 1 && MODES.find(item => item.toLowerCase() === values[0].toLowerCase());
-      if (!mode) return null;
-      changes.apiMode = mode;
     } else if (name === 'audit') {
       const value = values.length === 1 && values[0].toLowerCase();
       if (!['on', 'off', 'true', 'false', 'yes', 'no'].includes(value)) return null;
@@ -389,7 +383,7 @@ function parseSettings(rest) {
   return changes;
 }
 function describeSettings(changes) {
-  const named = { depth: 'depth', width: 'width', apiMode: 'Agent API mode', audit: 'audit', providers: 'providers', models: 'models' };
+  const named = { depth: 'depth', width: 'width', audit: 'audit', providers: 'providers', models: 'models' };
   return `change Fleet's settings: ${Object.entries(changes).map(([name, value]) => `${named[name]} ${
     name === 'audit' ? (value ? 'on' : 'off') : quoted(Array.isArray(value) ? value.join(' ') : value, 200)}`).join(', ')}`;
 }

@@ -77,6 +77,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const link = require('./openshell-tree-link');
+const { turnStatus } = require('./turn-status');
 
 // A worker's own server: its role.
 const ROLE_ENV = 'TOOLSENABLED_OPENSHELL_ROLE';
@@ -642,13 +643,14 @@ function createOpenShellAgentHost({
     let completedText = typeof event.text === 'string' && event.text !== '' ? event.text : state.pendingText;
     const text = bounded(completedText, MAX_REPORT_CHARS);
     state.pendingText = null;
-    node.lastTurn = Object.freeze({ turnId: event.turnId || null, status: event.status || null, text, completedAt: now() });
+    const status = turnStatus(event.status);
+    node.lastTurn = Object.freeze({ turnId: event.turnId || null, status, text, completedAt: now() });
     node.updatedAt = now();
     save();
     // The report goes up by itself (see the header).
     deliver(node.parentNodeId || null, {
       id: crypto.randomUUID(), kind: 'report', from: node.displayName, fromNodeId: node.nodeId,
-      status: event.status || null, text: text || '', at: now(),
+      status, text: text || '', at: now(),
     });
     // At the turn boundary: settings that waited for it, then what was queued.
     serial(node, async () => {
@@ -950,12 +952,12 @@ function createOpenShellAgentHost({
     const bounds = slotBounds || savedSlotBounds({ env });
     if (used >= bounds.maxChildren) {
       throw refusal('TREE_SLOT_LIMIT', mode === 'host'
-        ? `This agent has ${used} of ${bounds.maxChildren} subagent slots in use by live subagents. Give one of them the work with agent_comms.send_local, or stop one with agent.stop, then start a new one.`
+        ? `This agent already has ${used} subagent${used === 1 ? '' : 's'} running or starting, the width setting's limit of ${bounds.maxChildren}. Give one of them the work with agent_comms.send_local, or stop one with agent.stop and start a new one. Only the person can raise the width.`
         : `This agent has ${used} of ${bounds.maxChildren} direct child slots. Reuse or restart an existing child, or delegate through one of its children within the saved depth limit.`);
     }
     const depth = caller.kind === 'root' ? 0 : depthOf(caller.node);
     if (depth + 1 > bounds.maxDepth) {
-      throw refusal('TREE_SLOT_LIMIT', `The saved delegation depth is ${bounds.maxDepth} below the root. Reuse an existing slot or choose a parent higher in the tree.`);
+      throw refusal('TREE_SLOT_LIMIT', `The depth setting allows ${bounds.maxDepth} level${bounds.maxDepth === 1 ? '' : 's'} of subagents below the person's session, and this one would be level ${depth + 1}. Give the work to an existing subagent, or ask the person to raise the depth.`);
     }
     if (document.nodes.length >= MAX_NODES) {
       throw refusal('TREE_SLOT_LIMIT', `This tree already holds ${MAX_NODES} agents. Remove finished ones before adding more.`);
@@ -1074,10 +1076,10 @@ function createOpenShellAgentHost({
       && (Boolean(live.get(child.nodeId)?.session) || child.state === 'starting')).length;
     const bounds = slotBounds || savedSlotBounds({ env });
     if (used >= bounds.maxChildren) {
-      throw refusal('TREE_SLOT_LIMIT', `${action} refused: the agent above it has ${used} of ${bounds.maxChildren} subagent slots in use by live subagents. Stop one with agent.stop first.`);
+      throw refusal('TREE_SLOT_LIMIT', `${action} refused: the agent above it already has ${used} subagent${used === 1 ? '' : 's'} running or starting, the width setting's limit of ${bounds.maxChildren}. Stop one with agent.stop first.`);
     }
     if (depthOf(node) > bounds.maxDepth) {
-      throw refusal('TREE_SLOT_LIMIT', `${action} refused: the saved delegation depth is ${bounds.maxDepth} below the root, and this subagent sits deeper. Start a new one higher in the tree.`);
+      throw refusal('TREE_SLOT_LIMIT', `${action} refused: the depth setting allows ${bounds.maxDepth} level${bounds.maxDepth === 1 ? '' : 's'} of subagents below the person's session, and this subagent sits deeper. Start a new one higher in the tree.`);
     }
     const parent = parentNodeId ? byId(parentNodeId) : null;
     assertWithinLimits(limitsBelow(parent ? { kind: 'node', node: parent } : { kind: 'root' }), row, tier, action);
@@ -1505,22 +1507,31 @@ function createOpenShellAgentHost({
   /* --------------------------------------------------------- watch -- */
 
   /* A WORKER WHOSE CLI ENDED BY ITSELF IS NOT LEFT LOOKING ALIVE. An idle
-     CLI that exits (a crash, an out-of-memory kill) produces no turn event,
-     so the tree would go on calling it running until the next message failed.
-     Each running worker's process group leader is checked; one that is gone
-     is recorded as failed, what is left of its group is ended, and the circle
+     CLI that exits (a crash, an out-of-memory kill, a kill from outside)
+     produces no turn event, so the tree would go on calling it running until
+     the next message failed. Each running worker is checked two ways: its
+     process group leader, where the session has one, and the session's own
+     adapter, which knows when its CLI's connection ended. One that is gone is
+     recorded as failed, what is left of its group is ended, and the circle
      above it is told. */
+  function cliGone(node) {
+    if (node.process && !processAlive(node.process)) return true;
+    const session = live.get(node.nodeId)?.session;
+    try { return Boolean(session && session.adapter && typeof session.adapter.hasEnded === 'function' && session.adapter.hasEnded()); }
+    catch { return false; }
+  }
+
   async function checkWorkers() {
     const ended = [];
     for (const node of document.nodes) {
-      if (!running(node) || !node.process || processAlive(node.process)) continue;
+      if (!running(node) || !cliGone(node)) continue;
       ended.push(node);
       await serial(node, async () => {
-        if (!running(node) || !node.process || processAlive(node.process)) return;
+        if (!running(node) || !cliGone(node)) return;
         await endSession(node, { state: 'failed',
           error: { code: 'OPENSHELL_AGENT_EXITED', message: `${node.displayName}'s ${node.provider} program exited by itself.` } });
         deliver(node.parentNodeId || null, {
-          id: crypto.randomUUID(), kind: 'report', from: node.displayName, fromNodeId: node.nodeId, status: 'exited',
+          id: crypto.randomUUID(), kind: 'report', from: node.displayName, fromNodeId: node.nodeId, status: 'failed',
           text: `${node.displayName}'s ${node.provider} program exited by itself, so it is no longer running. Its conversation is kept: resume it with agent.resume, or restart it.`,
           at: now(),
         });

@@ -12,15 +12,26 @@ const launchPolicy = require('../supervision/launch-environment');
 const STDERR_LIMIT = 64 * 1024;
 function refusal(code, message) { return Object.assign(new Error(message), { code }); }
 
-function createAcpProcessTransport({ command, args, cwd, env, rootLaunch } = {}) {
+// The environment a CLI process really gets: the person's own, scrubbed, and then the variables the
+// launch supplies for it. The launcher inspects the CLI with exactly this environment, so what is
+// inspected is what runs.
+function acpChildEnvironment({ env = process.env, profileEnv = {}, workspace = null } = {}) {
+  return { ...launchPolicy.confinedAgentCliEnvironment(env, { workspace }), ...profileEnv };
+}
+
+function createAcpProcessTransport({ command, args, cwd, env, launchVariables, rootLaunch } = {}) {
   if (typeof command !== 'string' || !path.isAbsolute(command)
       || !Array.isArray(args) || args.some(arg => typeof arg !== 'string')) {
     throw refusal('ACP_LAUNCH_INVALID', 'An ACP worker requires a pinned absolute CLI and string arguments.');
   }
-  const child = spawnHidden(command, args, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'],
+  const child = spawnHidden(command, args, { cwd, env, ...(launchVariables ? { launchVariables } : {}), stdio: ['pipe', 'pipe', 'pipe'],
     containProcessTree: true, ...(rootLaunch ? { rootLaunch } : {}) });
   const rootReady = rootLaunch ? waitForRootSpawn(child) : null;
   rootReady?.catch(() => {});
+  // The CLI's own process: under the process supervisor it is the root the supervisor reports, not the supervisor.
+  const rootPid = child.jobReady && typeof child.jobReady.then === 'function'
+    ? child.jobReady.then(info => info.rootPid) : Promise.resolve(child.pid);
+  rootPid.catch(() => {});
   const cleanup = createStartupCleanup(child);
   const listeners = new Set();
   let stderr = '';
@@ -53,6 +64,7 @@ function createAcpProcessTransport({ command, args, cwd, env, rootLaunch } = {})
   child.stdin.on('error', error => noteExit({ error }));
   return {
     rootReady,
+    rootPid: () => rootPid,
     write(line) {
       if (typeof line !== 'string' || closing || exit || !child.stdin.writable) {
         throw refusal('ACP_PIPE_CLOSED', 'The ACP worker pipe is unavailable.');
@@ -94,7 +106,7 @@ function validatePlan({ provider, profile, command, args, cwd, mcpServers }) {
 }
 
 async function openAcpSession({ provider, profile = acpProfile(provider), command, args, cwd,
-  env, mcpServers = [], clientInfo, onEvent, rootLaunch, signal = null,
+  env, profileEnv = {}, mcpServers = [], clientInfo, onEvent, rootLaunch, signal = null,
   startupTimeoutMs = 60_000, cleanupTimeoutMs = 5_000, threadId = null,
   model = null, transportFactory = createAcpProcessTransport } = {}) {
   validatePlan({ provider, profile, command, args, cwd, mcpServers });
@@ -108,8 +120,8 @@ async function openAcpSession({ provider, profile = acpProfile(provider), comman
   let transport;
   let adapter;
   try {
-    const childEnv = launchPolicy.confinedAgentCliEnvironment(env || process.env, { workspace: cwd });
-    transport = transportFactory({ command, args, cwd, env: childEnv, rootLaunch });
+    const childEnv = acpChildEnvironment({ env: env || process.env, profileEnv, workspace: cwd });
+    transport = transportFactory({ command, args, cwd, env: childEnv, launchVariables: profileEnv, rootLaunch });
     adapter = new AcpAdapter({ transport, clientInfo, defaultCwd: cwd, mcpServers });
     adapter.modelProvider = provider;
     if (onEvent) adapter.onEvent(onEvent);
@@ -120,7 +132,8 @@ async function openAcpSession({ provider, profile = acpProfile(provider), comman
     if (method) await startup.wait(() => adapter.authenticate(method));
     const started = await startup.wait(() => threadId === null ? adapter.startThread() : adapter.resumeThread(threadId));
     if (model) await startup.wait(() => adapter.selectModel(started.threadId, model));
-    return { adapter, threadId: started.threadId, ...(model ? { model: `${provider}/${model}` } : {}),
+    const pid = typeof transport.rootPid === 'function' ? await transport.rootPid().catch(() => null) : null;
+    return { adapter, threadId: started.threadId, pid, ...(model ? { model: `${provider}/${model}` } : {}),
       close() { try { adapter.close(); } finally { transport.close(); } } };
   } catch (error) {
     const auth = error?.code === 'ACP_AUTH_REQUIRED'
@@ -148,4 +161,4 @@ function resumeAcpSession(options) {
   }
   return openAcpSession(options);
 }
-module.exports = { createAcpProcessTransport, startAcpSession, resumeAcpSession };
+module.exports = { createAcpProcessTransport, startAcpSession, resumeAcpSession, acpChildEnvironment };

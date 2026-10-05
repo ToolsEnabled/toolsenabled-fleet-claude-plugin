@@ -10,16 +10,16 @@ const CHANGE_HINT = 'To change them, type /tefleet settings followed by the chan
 
 const settingsTool = Object.freeze({
   name: 'fleet_settings', title: 'Fleet settings',
-  description: 'Show Fleet\'s settings for this project: depth (levels of subagents below this session), width (subagents each agent may have running at once), which agent CLIs (providers) and models subagents may use, the Agent API mode with the tools it gives each agent CLI\'s subagents, and audit (off by default, when Fleet keeps no audit record; on, Fleet signs a record of the reads and writes of Fleet\'s own file tools, ledger changes and task and memory changes it makes, and refuses any of them it cannot record). Changes nothing: only the person changes these settings, by typing /tefleet settings followed by the change.',
+  description: 'Show Fleet\'s settings for this project: depth (levels of subagents below this session), width (subagents each agent may have running at once), which agent CLIs (providers) and models subagents may use, the tools every subagent gets, and audit (off by default, when Fleet keeps no audit record; on, Fleet signs a record of the reads and writes of Fleet\'s own file tools, ledger changes and task and memory changes it makes, and refuses any of them it cannot record). Changes nothing: only the person changes these settings, by typing /tefleet settings followed by the change.',
   inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 });
 
-// At the Standard level, the only level the plugin runs, every Agent API mode
-// gives every subagent the same tools: read and change access to the project,
-// each CLI by its own mechanism (see the README), plus Fleet's coordination
-// tools, and no shell. The mode is kept so a choice saved earlier still applies.
-const MODE_TOOLS = 'Read and change access to the project, plus Fleet\'s coordination tools, and no shell';
+// At the Standard level, the only level the plugin runs, every subagent gets
+// the same tools whichever agent CLI runs it: read and change access to the
+// project, each CLI by its own mechanism (see the README), plus Fleet's
+// coordination tools, and no shell.
+const SUBAGENT_TOOLS = 'Read and change access to the project, plus Fleet\'s coordination tools, and no shell';
 
 function text(value, isError = false) {
   return { ...(isError ? { isError: true } : {}), content: [{ type: 'text', text: value }] };
@@ -34,8 +34,7 @@ function describeSettings(view) {
     `- Subagents: ${view.subagents ? `on, using ${view.providers.join(', ')}` : 'off'}`,
     `- Depth: ${view.depth} level${view.depth === 1 ? '' : 's'} of subagents below this session`,
     `- Width: up to ${view.width} subagent${view.width === 1 ? '' : 's'} running at once under each agent`,
-    `- Agent API mode: ${view.apiMode}${view.apiMode === 'Only' ? ' (the default)' : ''}`,
-    `  - Every subagent gets: ${MODE_TOOLS}.`,
+    `- Tools: every subagent, whichever agent CLI runs it, gets: ${SUBAGENT_TOOLS}.`,
     `- Models: ${models}`,
     `- Audit: ${view.audit ? 'on' : 'off'}`,
     ...(view.notes || [])];
@@ -62,4 +61,4 @@ function runSettings(args = {}, { run = spawnSync, env = process.env } = {}) {
   return text([...describeSettings(view), CHANGE_HINT].join('\n'));
 }
 
-module.exports = { settingsTool, runSettings, describeSettings, MODE_TOOLS, CHANGE_HINT };
+module.exports = { settingsTool, runSettings, describeSettings, SUBAGENT_TOOLS, CHANGE_HINT };

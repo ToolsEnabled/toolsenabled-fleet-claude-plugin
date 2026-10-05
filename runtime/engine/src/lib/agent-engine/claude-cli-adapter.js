@@ -1195,6 +1195,12 @@ class ClaudeCliAdapter {
     return this.lastUsage;
   }
 
+  /* True once the CLI process has ended, whether this adapter closed it or it ended by itself. An idle
+     session that ends produces no turn event, so the host asks. */
+  hasEnded() {
+    return this.closed === true || this.exitInfo !== null;
+  }
+
   close() {
     const wait = this.eventBoundary.failed ? null : this.waitForEvents();
     if (wait) {

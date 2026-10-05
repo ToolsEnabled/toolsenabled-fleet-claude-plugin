@@ -2,7 +2,7 @@
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { childEnvironment } = require('./runtime-config');
-const VERSION = '1.9.0';
+const VERSION = '1.10.0';
 const PROTOCOLS = Object.freeze(['2024-11-05', '2025-03-26', '2025-06-18']);
 const guidance = 'Fleet is installed but not set up for this project. Type /tefleet setup (or ask Claude to set up Fleet) and approve the setup tool. Fleet\'s tools then appear in this session.';
 // Fleet works in one project at a time; from any other project it offers to move.
@@ -20,12 +20,12 @@ const statusTool = Object.freeze({
 });
 const setupTool = Object.freeze({
   name: 'fleet_setup', title: 'Set up Fleet for a project',
-  description: 'Set up Fleet for this session\'s project folder when the person asks for it. Creates Fleet\'s private state folder (~/.toolsenabled-fleet-plugin by default) at the Standard permission level and records the project folder. Accepts only the folder this session works in, or a folder above it inside the home folder. Refuses a folder that does not exist, a version-control, CI, git-hook, package, Python environment or tool settings folder such as .git, .github, .husky, node_modules, .venv, .claude, .codex or .vscode or anything inside one, a dot folder of the home folder, ~/bin and any folder on the person\'s PATH or inside one. Turns on subagents for the installed agent CLIs that are signed in, checked with each CLI\'s own status command. Does not change Claude Code settings, other projects, or any sign-in.',
+  description: 'Set up Fleet for this session\'s project folder when the person asks for it. Creates Fleet\'s private state folder (~/.toolsenabled-fleet-plugin by default) at the Standard permission level and records the project folder. Accepts only the folder this session works in, or a folder above it inside the home folder. Refuses a folder that does not exist, a version-control, CI, git-hook, package, Python environment or tool settings folder such as .git, .github, .husky, node_modules, .venv, .claude, .codex, .opencode or .vscode or anything inside one, a dot folder of the home folder, ~/bin and any folder on the person\'s PATH or inside one. Turns on subagents for each installed agent CLI that passes its check: its own sign-in status command or, for a CLI that speaks the Agent Client Protocol, that protocol\'s initialize request. Does not change Claude Code settings, other projects, or any sign-in.',
   inputSchema: {
     type: 'object',
     properties: {
       workspace: { type: 'string', description: 'Absolute path of the project folder to set up: the current working directory, or a folder above it inside the home folder.' },
-      providers: { type: 'array', items: { type: 'string', enum: ['claude', 'codex'] }, minItems: 1, uniqueItems: true,
+      providers: { type: 'array', items: { type: 'string', enum: Object.keys(require('./setup-entry').SUBAGENT_CLIS) }, minItems: 1, uniqueItems: true,
         description: 'Only when the person names which agent CLIs subagents may use. Omit it to use every installed agent CLI that is signed in.' },
     },
     required: ['workspace'], additionalProperties: false,

@@ -13,15 +13,15 @@ const { real, inside, projectFolder } = require('./project-folder');
 // command that starts that sandbox around /bin/true in the project, with no
 // model call.
 const SUBAGENT_CLIS = Object.freeze({
-  claude: Object.freeze({ status: Object.freeze(['--setting-sources', '', '--restricted', 'auth', 'status']), signIn: 'claude auth login' }),
-  codex: Object.freeze({ status: Object.freeze(['login', 'status']), signIn: 'codex login',
+  claude: Object.freeze({ folder: '.claude', status: Object.freeze(['--setting-sources', '', '--restricted', 'auth', 'status']), signIn: 'claude auth login' }),
+  codex: Object.freeze({ folder: '.codex', status: Object.freeze(['login', 'status']), signIn: 'codex login',
     sandbox: Object.freeze({ args: workspace => ['sandbox', '-P', ':workspace', '-C', workspace, '/bin/true'],
       help: 'https://developers.openai.com/codex/concepts/sandboxing#prerequisites' }) }),
   // A CLI that speaks the Agent Client Protocol is checked by starting it the way a subagent starts
   // it and asking the protocol's initialize request, which needs no sign-in and makes no model call.
   // Its own listing says how many logins it has saved; with none, its hosted models may refuse a
   // subagent, which setup says without turning the CLI off (a provider can also be configured without one).
-  opencode: Object.freeze({ acp: Object.freeze(['acp', '--pure']), signIn: 'opencode auth login',
+  opencode: Object.freeze({ folder: '.opencode', acp: Object.freeze(['acp', '--pure']), signIn: 'opencode auth login',
     logins: Object.freeze({ args: Object.freeze(['providers', 'list']), none: /(?:^|\s)0 credentials?\b/ }) }),
 });
 // Only a sandbox that reports it could not start turns a CLI off. A usage error
@@ -30,10 +30,10 @@ const SANDBOX_FAILURE = /bwrap|bubblewrap|namespace|landlock|seccomp|sandbox/i;
 const SETUP_COMMAND = '/tefleet setup';
 // Folders whose files other programs run or obey: version control, CI and git
 // hooks, build output and installed packages, Python environments, and the
-// settings of Claude Code, Codex, editors and dev containers. Fleet refuses one
-// at any depth of the project path.
-const CONTROL_FOLDERS = Object.freeze(['.git', '.hg', '.svn', '.github', '.husky', '.claude', '.codex', '.vscode', '.idea',
-  '.devcontainer', 'node_modules', '.venv', 'venv']);
+// settings of each supported agent CLI, editors and dev containers. Fleet refuses
+// one at any depth of the project path.
+const CONTROL_FOLDERS = Object.freeze(['.git', '.hg', '.svn', '.github', '.husky',
+  ...Object.values(SUBAGENT_CLIS).map(cli => cli.folder), '.vscode', '.idea', '.devcontainer', 'node_modules', '.venv', 'venv']);
 
 // The engine's own rules for where an agent CLI may be found: never in the
 // project, Fleet's state folder or a temporary folder (subagent launches use

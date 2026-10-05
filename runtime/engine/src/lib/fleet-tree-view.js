@@ -11,8 +11,8 @@ const EFFORT = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,39}$/;
 const SESSION = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,199}$/;
 const ROLE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
-const LAST_STATUS = new Set(['completed', 'failed', 'interrupted', 'cancelled']);
 const { isProviderId } = require('./openshell-worker-providers');
+const { turnStatus } = require('./turn-status');
 
 function safe(value, pattern, fallback) {
   return typeof value === 'string' && pattern.test(value) ? value : fallback;
@@ -39,11 +39,13 @@ function pending(value) {
 
 function lastTurn(value) {
   if (!value || typeof value !== 'object') return null;
-  return { status: LAST_STATUS.has(value.status) ? value.status : 'unknown', completedAt: date(value.completedAt) };
+  // A turn saved by an earlier version may carry a CLI's own word for how it ended.
+  const status = typeof value.status === 'string' && value.status !== '' ? turnStatus(value.status) : 'unknown';
+  return { status, completedAt: date(value.completedAt) };
 }
 
 function workerState(node, live) {
-  if (node.state === 'failed' || node.lastTurn?.status === 'failed') return 'failed';
+  if (node.state === 'failed' || lastTurn(node.lastTurn)?.status === 'failed') return 'failed';
   if (!live || node.state === 'stopped') return 'done';
   if (node.waitingForApproval === true && node.turn === 'running') return 'waiting';
   if (node.state === 'starting' || node.turn === 'running') return 'running';

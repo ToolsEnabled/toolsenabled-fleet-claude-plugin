@@ -2,13 +2,15 @@
 
 // Dependency-light child environment policy, in two parts.
 //
-// AN AGENT CLI (claude, codex) THAT FLEET STARTS AS A SUBAGENT runs on the
-// person's own sign-in, exactly as it would from their terminal. Its own
-// authentication variables (API keys, Bedrock, Vertex, Foundry, AWS and the
-// like) are passed through unchanged, because restricting a CLI's built-in
-// sign-in methods is not Fleet's to do. What is removed is only what binds a
-// process to the lead session that started Fleet: its session ids, messaging
-// socket, host sign-in refresh, IDE binding and Fleet's own internal variables.
+// AN AGENT CLI (Claude Code, Codex or OpenCode) THAT FLEET STARTS AS A SUBAGENT
+// signs in by its own saved login, exactly as it would from the person's
+// terminal. Fleet never carries a provider key, token or endpoint, so the
+// provider sign-in variables (API keys, Bedrock, Vertex, Foundry, AWS and the
+// like) and every variable whose name says it holds a credential are removed,
+// and so is what binds a process to the lead session that started Fleet: its
+// session ids, messaging socket, host sign-in refresh, IDE binding and Fleet's
+// own internal variables. Sign-in locations such as CLAUDE_CONFIG_DIR and
+// CODEX_HOME are kept, so each CLI finds its own saved login.
 // agentCliEnvironment() is that environment; the plugin's setup sign-in check
 // uses the same function, so setup and subagents see one environment.
 //
@@ -153,7 +155,23 @@ function agentCliEnvironment(baseEnvironment = process.env) {
    sign-in check calls. */
 const subscriptionLaunchEnvironment = agentCliEnvironment;
 
-/* The names listed for each provider, removed whole and without regard to case. */
+// The variables a CLI reads its own configuration or sign-ins from, by family. A CLI whose switches can carry inline
+// configuration or a sign-in (OpenCode reads a great many from OPENCODE_*: inline sign-in and configuration,
+// permissions, server logins, experimental tools) has its whole family removed from every other process; a launch
+// of that CLI sets the few it needs itself, after this removal. One table: the launcher's check of a started
+// process reads the same family (environmentFamily).
+const ENVIRONMENT_FAMILIES = Object.freeze([['OPENCODE_', 'opencode']]
+  .map(([prefix, provider]) => Object.freeze({ prefix, provider })));
+function inProviderFamily(name) {
+  const upper = String(name).toUpperCase();
+  return ENVIRONMENT_FAMILIES.some(family => upper.startsWith(family.prefix));
+}
+function environmentFamily(provider) {
+  const prefixes = ENVIRONMENT_FAMILIES.filter(family => family.provider === provider).map(family => family.prefix);
+  return prefixes.length ? new RegExp(`^(?:${prefixes.join('|')})`, 'i') : null;
+}
+
+/* The names listed for each provider, removed whole and without regard to case, and each provider's family. */
 function credentialFreeEnvironment(baseEnvironment = process.env) {
   invalidEnvironment(baseEnvironment);
   // Each spread leaves the caller's environment unchanged; envScrub matches
@@ -164,6 +182,7 @@ function credentialFreeEnvironment(baseEnvironment = process.env) {
       { ...environment }, PROVIDER_ENVIRONMENT_NAMES[providerId]
     );
   }
+  envScrub.deleteEnvMatching(environment, inProviderFamily);
   return environment;
 }
 
@@ -171,6 +190,26 @@ function credentialFreeEnvironment(baseEnvironment = process.env) {
 function withoutCredentialLikeNames(environment) {
   envScrub.deleteEnvMatching(environment, name => CREDENTIAL_LIKE_NAME.test(String(name)));
   return environment;
+}
+
+/* The variables a launch states for its own child (an agent CLI's configuration file, its isolation switches),
+   added after every scrub. They are the only way a name of a CLI's own family reaches that CLI, so each must
+   be an ordinary assignment and no credential, provider sign-in variable or binding of the lead session. */
+function assertLaunchVariables(variables) {
+  if (variables === undefined || variables === null) return {};
+  if (typeof variables !== 'object' || Array.isArray(variables)) {
+    throw new LaunchEnvironmentError('LAUNCH_VARIABLES_INVALID', 'The variables a launch supplies must be an object.');
+  }
+  const providerNames = new Set(Object.values(PROVIDER_ENVIRONMENT_NAMES).flat().map(name => name.toUpperCase()));
+  for (const [name, value] of Object.entries(variables)) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(name) || typeof value !== 'string' || value.includes('\0') || value.length > 4096) {
+      throw new LaunchEnvironmentError('LAUNCH_VARIABLES_INVALID', 'A variable a launch supplies must be a plain name with a short text value.', { variable: name.slice(0, 64) });
+    }
+    if (CREDENTIAL_LIKE_NAME.test(name) || providerNames.has(name.toUpperCase()) || leadSessionBinding(name)) {
+      throw new LaunchEnvironmentError('LAUNCH_VARIABLES_CREDENTIAL', 'A launch cannot supply a credential, a provider sign-in variable or a binding of the lead session.', { variable: name.slice(0, 64) });
+    }
+  }
+  return variables;
 }
 
 function assertNoBillingCredentials(environment, { context = '' } = {}) {
@@ -198,8 +237,8 @@ function safeLaunchEnvironment(baseEnvironment = process.env, { context = '' } =
 
 /* WHERE AN AGENT CLI IS, found the way the person's terminal finds it -- the
  * first match on PATH -- except that no folder a subagent can write is ever
- * searched. A Codex subagent can create an executable file in the project, and
- * Fleet starts the CLIs outside any sandbox, so a `codex` or `claude` planted
+ * searched. A subagent can create an executable file in the project, and
+ * Fleet starts the CLIs outside any sandbox, so an agent CLI (`claude`, `codex` or `opencode`) planted
  * in a project folder that happens to be on PATH (an activated .venv/bin,
  * direnv's PATH_add, node_modules/.bin, an empty or relative entry meaning
  * the working folder) must never be the one Fleet runs. Skipped: empty and
@@ -257,7 +296,7 @@ function resolveAgentCli(name, { env = process.env, workspace = null, extraRoots
  * person's PATH without the folders resolveAgentCli() never searches (empty and
  * relative entries, and entries inside the project, /tmp, $TMPDIR or the system
  * temporary folder, by lexical and by real path). Pinning the CLI itself is not
- * enough: an npm-installed `claude` or `codex` starts with
+ * enough: an npm-installed agent CLI (`claude`, `codex` or `opencode`) starts with
  * `#!/usr/bin/env node`, which looks `node` up on the PATH it is given, so a
  * `node` planted in a project folder on PATH (an activated .venv/bin,
  * node_modules/.bin) would run outside any sandbox. When no entry is left the
@@ -313,11 +352,13 @@ module.exports = Object.freeze({
   PROVIDER_ENVIRONMENT_NAMES,
   SUBSCRIPTION_PROVIDER_IDS,
   agentCliEnvironment,
+  assertLaunchVariables,
   agentSearchPath,
   assertAgentCliPath,
   confinedAgentCliEnvironment,
   assertNoBillingCredentials,
   credentialFreeEnvironment,
+  environmentFamily,
   leadSessionBinding,
   resolveAgentCli,
   safeLaunchEnvironment,

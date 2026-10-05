@@ -3,7 +3,7 @@
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { resolveConfig, configureEnvironment, childEnvironment } = require('./runtime-config');
-// Fleet's settings. Depth, width, the Agent API mode and audit are the engine's
+// Fleet's settings. Depth, width and audit are the engine's
 // own settings; providers and models are saved by setup, so changing them runs
 // setup again for the same project (which re-checks each agent CLI). Changes
 // come only from the person: the prompt hook runs --apply for
@@ -11,7 +11,6 @@ const { resolveConfig, configureEnvironment, childEnvironment } = require('./run
 const SETTINGS = Object.freeze({
   depth: Object.freeze({ id: 'fleet.tree_depth', min: 1, max: 16 }),
   width: Object.freeze({ id: 'fleet.tree_width', min: 1, max: 64 }),
-  apiMode: Object.freeze({ id: 'agent.agent_api', options: Object.freeze(['Only', 'Optimized', 'Enabled', 'Disabled']) }),
   audit: Object.freeze({ id: 'audit.enabled', toggle: true }),
 });
 function run(args, what, { cwd, env = process.env } = {}) {
@@ -35,7 +34,7 @@ function current(config) {
     const record = (JSON.parse(host(config, ['settings', 'get', row.id, '--json'])).records || []).find(item => item.id === row.id);
     let value = record ? record.valueText : null;
     try { value = JSON.parse(value); } catch { /* plain text */ }
-    view[name] = row.toggle ? value === true : row.options ? String(value) : Number(value);
+    view[name] = row.toggle ? value === true : Number(value);
   }
   return view;
 }
@@ -46,9 +45,6 @@ function apply(config, changes) {
     if (value !== undefined && !(Number.isInteger(value) && value >= SETTINGS[name].min && value <= SETTINGS[name].max)) {
       throw new Error(`${name} must be a whole number from ${SETTINGS[name].min} through ${SETTINGS[name].max}.`);
     }
-  }
-  if (changes.apiMode !== undefined && !SETTINGS.apiMode.options.includes(changes.apiMode)) {
-    throw new Error(`apiMode must be one of ${SETTINGS.apiMode.options.join(', ')}.`);
   }
   if (changes.audit !== undefined && typeof changes.audit !== 'boolean') throw new Error('audit must be true (on) or false (off).');
   const list = value => (value === undefined ? undefined : value === 'all' || (Array.isArray(value) && value.length === 1 && value[0] === 'all')
@@ -73,11 +69,10 @@ function apply(config, changes) {
     else if (!saved.workers) notes.push('Subagents are now on. Start a new Claude Code session in this project to use them.');
     else notes.push('Provider and model changes apply now, including in this session.');
   }
-  for (const name of ['depth', 'width', 'apiMode', 'audit']) {
+  for (const name of ['depth', 'width', 'audit']) {
     if (changes[name] !== undefined) host(config, ['settings', 'set', SETTINGS[name].id, String(changes[name])]);
   }
   if (changes.depth !== undefined || changes.width !== undefined) notes.push('Depth and width apply to the next subagent started.');
-  if (changes.apiMode !== undefined) notes.push('The Agent API mode applies to subagents started from now on.');
   if (changes.audit === true) {
     notes.push('Audit is on from the next Fleet operation: Fleet signs a record of the file reads and writes, commands, ledger changes and task and memory changes it makes, and refuses any of them it cannot record. The audit tools appear in new Claude Code sessions.');
   } else if (changes.audit === false) notes.push('Audit is off. Records already made are kept; the audit tools leave new Claude Code sessions.');
@@ -91,8 +86,8 @@ async function main(argv = process.argv.slice(2)) {
     let changes;
     try { changes = JSON.parse(argv[1]); } catch { throw new Error('Settings changes must be JSON.'); }
     if (!changes || typeof changes !== 'object' || Array.isArray(changes)
-        || Object.keys(changes).some(key => !['depth', 'width', 'apiMode', 'audit', 'providers', 'models'].includes(key))) {
-      throw new Error('Change only depth, width, apiMode, audit, providers or models.');
+        || Object.keys(changes).some(key => !['depth', 'width', 'audit', 'providers', 'models'].includes(key))) {
+      throw new Error('Change only depth, width, audit, providers or models.');
     }
     process.stdout.write(JSON.stringify(apply(config, changes)) + '\n');
     return;

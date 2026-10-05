@@ -930,6 +930,12 @@ class AcpAdapter {
     return Object.freeze({ models: Object.freeze([...models.values()]) });
   }
 
+  /* True once the connection to the CLI has failed or been closed. An idle session that ends produces no
+     turn event, so the host asks. */
+  hasEnded() {
+    return Boolean(this.closed);
+  }
+
   close() {
     const wait = this.eventBoundary.failed ? null : this.waitForEvents();
     if (wait) {

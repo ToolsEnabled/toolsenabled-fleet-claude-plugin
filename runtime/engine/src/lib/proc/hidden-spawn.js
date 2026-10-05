@@ -182,10 +182,16 @@ function spawnHidden(command, args = [], options = {}) {
     );
   }
 
+  // The only way a name of the CLI's own family, or any other name the scrub removes, reaches the child: the
+  // variables this launch states for it, validated, and added after the scrub.
+  const launchVariables = require('../supervision/launch-environment').assertLaunchVariables(options.launchVariables);
+  const childEnvironment = environment => ({ ...agentCliEnvironment(environment), ...launchVariables });
+
   const {
     shell,
     windowsHide,
     env,
+    launchVariables: _launchVariables,
     credentialEnvironment: statedCredentials,
     containProcessTree = false,
     processGroup = false,
@@ -211,18 +217,18 @@ function spawnHidden(command, args = [], options = {}) {
     const child = spawnLinuxOwned(invocation.command, invocation.args, {
       ...rest,
       cwd: containedCwd,
-      env: agentCliEnvironment(childEnv),
+      env: childEnvironment(childEnv),
       shell: false,
       windowsHide: true,
       terminateDescendantsOnRootExit: true,
-    }, { launchEnvironment: agentCliEnvironment, ...(beforeRootSpawn ? { beforeRootSpawn } : {}) });
+    }, { launchEnvironment: childEnvironment, ...(beforeRootSpawn ? { beforeRootSpawn } : {}) });
     rootLaunch?.spawned(child);
     return child;
   }
 
   // No containment wrapper on this path. The same check runs immediately before
   // the direct root, after resolution and environment preparation, not earlier.
-  const directEnvironment = agentCliEnvironment(childEnv);
+  const directEnvironment = childEnvironment(childEnv);
   beforeRootSpawn?.();
   const child = nodeSpawn(invocation.command, invocation.args, {
     ...rest,
