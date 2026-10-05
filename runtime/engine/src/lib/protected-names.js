@@ -100,9 +100,23 @@ function globSource(glob) {
   }
   return source;
 }
+const COMPILED = new Map();
+function compiled(glob) {
+  if (!COMPILED.has(glob)) COMPILED.set(glob, new RegExp(`(?:^|/)${globSource(glob)}(?:/.*)?$`, 'i'));
+  return COMPILED.get(glob);
+}
+// Windows opens a name with trailing dots or spaces, or with an alternate data
+// stream suffix, as the plain name, so such a spelling is matched as the plain
+// name too. On Linux these are different names; protecting them as well costs nothing.
+function windowsResolved(normalized) {
+  return normalized.split('/').map(segment => segment.replace(/:.*$/, '').replace(/[. ]+$/, '')).join('/');
+}
 function matches(glob, filename) {
   const normalized = filename.replace(/\\/g, '/');
-  return new RegExp(`(?:^|/)${globSource(glob)}(?:/.*)?$`, 'i').test(normalized);
+  const pattern = compiled(glob);
+  if (pattern.test(normalized)) return true;
+  const resolved = windowsResolved(normalized);
+  return resolved !== normalized && pattern.test(resolved);
 }
 function protectedReadName(filename) { return PROTECTED_READ_PATTERNS.some(glob => matches(glob, filename)); }
 function protectedEditName(filename) { return PROTECTED_EDIT_PATTERNS.some(glob => matches(glob, filename)); }

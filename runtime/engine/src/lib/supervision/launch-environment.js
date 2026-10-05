@@ -127,10 +127,12 @@ function leadSessionBinding(name) {
   return LEAD_SESSION_ENV.has(upper) || LEAD_SESSION_PREFIXES.some(prefix => upper.startsWith(prefix));
 }
 
-// A name that says it holds a provider's key or token, whoever the provider is,
-// so a CLI Fleet has no list for never receives one either. Names such as
-// GITHUB_TOKEN, which are not a provider sign-in, are not matched.
-const CREDENTIAL_LIKE_NAME = /(?:^|_)(?:API_?KEY|AUTH_?TOKEN|ACCESS_?TOKEN|OAUTH_?TOKEN|BEARER_?TOKEN|SESSION_?TOKEN|SECRET_?(?:ACCESS_?)?KEY|CREDENTIALS?)(?:_|$)/i;
+// A name that says it holds a key, token, secret, password or credential, whoever
+// the provider is and whatever its naming convention, so a CLI Fleet has no list
+// for never receives one either. The word must stand alone in the name, between
+// underscores or at either end: OPENAI_API_KEY, HF_TOKEN and DB_PASSWORD match,
+// KEYBOARD_LAYOUT does not. A subagent has no use for any of them.
+const CREDENTIAL_LIKE_NAME = /(?:^|_)(?:API_?KEY|AUTH_?TOKEN|ACCESS_?TOKEN|OAUTH_?TOKEN|BEARER_?TOKEN|SESSION_?TOKEN|SECRET_?(?:ACCESS_?)?KEY|PRIVATE_?KEY|TOKENS?|KEYS?|SECRETS?|PASSWORDS?|PASSWD|PASSPHRASES?|CREDENTIALS?)(?:_|$)/i;
 
 /* The environment an agent CLI gets: the person's own, without the lead
    session's bindings and without any provider sign-in variable, so Fleet never

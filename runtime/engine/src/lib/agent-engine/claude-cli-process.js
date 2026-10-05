@@ -512,13 +512,12 @@ function createClaudeCliTransport({
   /* Injectable so the durable-log rule can be asserted without writing into the
      running installation's own logs directory. Defaults to the real sink. */
   stderrSink = durableStderrSink,
-  /* All three together, for an uncontained child only: the worker leads a
+  /* The first two together, for an uncontained child only: the worker leads a
      process group of its own instead, which close() ends whole.
-     `credentialEnvironment` carries provider variables the caller states
-     explicitly, which the scrub above would otherwise remove; it is the
-     post-scrub channel spawnHidden already defines for a credential meant for
-     this child, and it is refused on a contained child. Fleet's subagents
-     pass none of them, so their children stay contained. */
+     `credentialEnvironment` is a retired channel and must stay null: Fleet never
+     carries a provider credential, so a contained child refuses any other value
+     here and spawnHidden refuses it for every child. Fleet's subagents pass none
+     of them, so their children stay contained. */
   containProcessTree = true,
   processGroup = false,
   credentialEnvironment = null,
