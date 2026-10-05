@@ -5,8 +5,8 @@
     "email": "support@toolsenabled.ai"
   },
   "metadata": {
-    "description": "ToolsEnabled Fleet.",
-    "version": "1.7.2"
+    "description": "ToolsEnabled Fleet for Claude Code.",
+    "version": "1.7.3"
   },
   "plugins": [
     {

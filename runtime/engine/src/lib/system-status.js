@@ -256,7 +256,11 @@ function reservedMemoryState() {
       continue;
     }
     if (!keys.length) { namespaces[namespace] = { state: 'absent', rows: 0, malformed: 0 }; continue; }
-    if (RETIRED_MEMORY.includes(namespace)) { namespaces[namespace] = { state: 'retired', rows: keys.length, malformed: 0 }; continue; }
+    // No malformed count for a retired namespace: nothing in this release owns
+    // those rows, so no validator was asked and "malformed: 0" would have been a
+    // finding of zero problems out of a check that never ran. The row count is
+    // what can honestly be said, and 'retired' says why that is all.
+    if (RETIRED_MEMORY.includes(namespace)) { namespaces[namespace] = { state: 'retired', rows: keys.length }; continue; }
     const codes = new Set();
     let malformed = 0;
     for (const key of keys) {

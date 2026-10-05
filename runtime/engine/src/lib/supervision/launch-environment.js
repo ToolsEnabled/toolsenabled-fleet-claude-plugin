@@ -310,20 +310,29 @@ function readUserAuthSettings({ env = process.env, workspace = null, extraRoots 
   let stat;
   try { real = fs.realpathSync(file); stat = fs.statSync(real); } catch { return none(null); }
   if (!stat.isFile()) return none('the user settings file is not a regular file');
-  // Owned by this account, and not changeable by anyone else. A group-writable
-  // file in the account's own private group is normal (a umask of 002) and is
-  // accepted; one in any other group, or a world-writable one, is not.
-  if (typeof process.getuid === 'function' && (stat.uid !== process.getuid()
-      || (stat.mode & 0o002) !== 0 || ((stat.mode & 0o020) !== 0 && stat.gid !== process.getgid()))) {
+  /* Owned by this account, and writable by NOBODY else. An earlier release
+   * accepted a group-writable file when its gid matched this process's primary
+   * group, reasoning that a private per-user group is just a umask of 002. The
+   * gid match does not prove the group is private: macOS gives every local user
+   * `staff`, SUSE a shared `users`, and site setups routinely hand out a shared
+   * default group -- and umask 002 is deployed precisely on those systems, so the
+   * configurations where the allowance fired were the ones where its premise
+   * failed. There, mode 0664 lets another account rewrite this file, and Fleet
+   * would run the sign-in commands it names as the person and take an
+   * ANTHROPIC_BASE_URL from it. Node cannot enumerate a group's members, so there
+   * is nothing here to check against: refuse, and say how to fix it. */
+  if (typeof process.getuid === 'function' && (stat.uid !== process.getuid() || (stat.mode & 0o022) !== 0)) {
     return none('the user settings file is not owned by this account or can be changed by others (run chmod 600 on it)');
   }
   if (stat.size > MAX_AUTH_SETTINGS_BYTES) return none('the user settings file is over 1 MiB');
-  if (insideAny(subagentWritableRoots({ env, workspace, extraRoots }), real)) return none('the user settings file is in a folder a subagent can write');
+  const roots = subagentWritableRoots({ env, workspace, extraRoots });
+  if (insideAny(roots, real)) return none('the user settings file is in a folder a subagent can write');
   let parsed;
   try { parsed = JSON.parse(fs.readFileSync(real, 'utf8')); } catch { return none('the user settings file is not valid JSON'); }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return none(null);
   const settings = {};
-  const dropped = [];
+  const relative = [];
+  const writable = [];
   for (const key of AUTH_SETTING_COMMANDS) {
     const command = parsed[key];
     if (typeof command !== 'string' || command.length === 0 || command.length > MAX_AUTH_VALUE) continue;
@@ -331,7 +340,15 @@ function readUserAuthSettings({ env = process.env, workspace = null, extraRoots 
     // folder, which the subagent can write. A full path, ~/ or a bare name found
     // on the (filtered) PATH is the person's own program.
     const program = command.trim().split(/\s+/)[0];
-    if (program.includes('/') && !program.startsWith('/') && !program.startsWith('~/')) { dropped.push(key); continue; }
+    const named = program.startsWith('~/') ? path.join(home, program.slice(2)) : program;
+    if (program.includes('/') && !path.isAbsolute(named)) { relative.push(key); continue; }
+    /* A program Fleet is willing to name is also a program a subagent must not be
+     * able to rewrite. The agent never needs to touch settings.json for that: it
+     * only has to edit the helper the file points at, and the next launch runs it
+     * as the person. So a named command gets the same writable-root exclusion
+     * assertAgentCliPath applies to the agent CLI. A bare name needs no check
+     * here -- it is found on agentSearchPath, which already drops those roots. */
+    if (path.isAbsolute(named) && (insideAny(roots, path.resolve(named)) || insideAny(roots, realOrSelf(named)))) { writable.push(key); continue; }
     settings[key] = command;
   }
   const login = parsed.forceLoginMethod;
@@ -346,8 +363,11 @@ function readUserAuthSettings({ env = process.env, workspace = null, extraRoots 
       variables[name] = value;
     }
   }
+  const notes = [];
+  if (relative.length) notes.push(`${relative.join(' and ')} names a program by a relative path, which Fleet does not run from a subagent's folder (use a full path)`);
+  if (writable.length) notes.push(`${writable.join(' and ')} names a program inside a folder a subagent can write, so Fleet will not run it (move it outside the workspace and the temporary folders)`);
   return Object.freeze({ settings: Object.freeze(settings), env: Object.freeze(variables),
-    note: dropped.length ? `${dropped.join(' and ')} names a program by a relative path, which Fleet does not run from a subagent's folder (use a full path)` : null });
+    note: notes.length ? notes.join('; ') : null });
 }
 
 /* The environment and the --settings keys a Claude subagent, and the setup

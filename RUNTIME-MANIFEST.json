@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "files": {
     ".claude-plugin/marketplace.json": {
-      "sha256": "98b8588f99915b54da66c3065184f355156b5ed7a64c95f80f21c9171a4962ee",
+      "sha256": "64f1edb6e36cad6b9146ccd03118a8e7fe75bc63fecd6a050e44d3545de0fd56",
       "executable": false
     },
     ".claude-plugin/plugin.json": {
-      "sha256": "417adbe309c4eb96213714221b8648000a685c606da2c79ceb39a71776fe19fb",
+      "sha256": "ad1058667dc94c4171f0a407c0332364d59bea8804a7c1d14a2f53ab7bd8e4eb",
       "executable": false
     },
     ".mcp.json": {
@@ -18,11 +18,11 @@
       "executable": false
     },
     "LOCAL-PATCHES.json": {
-      "sha256": "90ad818c33c6fffb11c244ad1451fa8ac402666f80df87662a502090985677f5",
+      "sha256": "7c8183a6f91283245ccbdc1e9d5ee3c4fe9c8498f2c54066ea7827d9f77c0afa",
       "executable": false
     },
     "PRIVACY.md": {
-      "sha256": "ac4faaf079af4cb382707e0c46a3ab00b52be2d2cafb1b4433a6c1c65f5226ac",
+      "sha256": "9a186bace8ba40f988ade6b8508c4cd8adefa5779c19a04d2ebc32c7283a7c9f",
       "executable": false
     },
     "README.md": {
@@ -34,7 +34,7 @@
       "executable": false
     },
     "SOURCE-PINS.json": {
-      "sha256": "43bce55f3ff0f9b695064a282d5f848d705548cd1ce176d08a9a1c2e374094c8",
+      "sha256": "8dbfe369cb75ec9a368aee248a3ee3926f4227535acbca4bc923e96eb1d47792",
       "executable": false
     },
     "commands/tefleet.md": {
@@ -726,11 +726,11 @@
       "executable": false
     },
     "runtime/engine/src/lib/supervision/launch-environment.js": {
-      "sha256": "e3034f127be64264f916b8a181552848628d6e80f2b3631f460f76032ba19898",
+      "sha256": "7e165ceee578fcb8c3cc08a4523985ad640572d12995e13f85738f65475c17aa",
       "executable": false
     },
     "runtime/engine/src/lib/system-status.js": {
-      "sha256": "002925d88835e0d45efd70563997f18a6f62f36942ed1b95cfdeaa07bceade67",
+      "sha256": "438c7605c146f6282f6728c86f740a6de8a3263e8c2c2b4096954f96365d6b0c",
       "executable": false
     },
     "runtime/engine/src/lib/task-difficulty.js": {
@@ -806,7 +806,7 @@
       "executable": false
     },
     "setup-server.js": {
-      "sha256": "9a08bd43874f8b572686969d009f9b45143463a6ececace107e0e8868d176cfe",
+      "sha256": "f81fe28d733f2aa338d20e53d34d4dbcd9238d5c94363cdc9aa0e1bb98767114",
       "executable": false
     },
     "skills/toolsenabled-fleet/SKILL.md": {

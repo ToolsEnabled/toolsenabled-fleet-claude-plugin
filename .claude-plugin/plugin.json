@@ -1,6 +1,6 @@
 {
   "name": "toolsenabled-fleet",
-  "version": "1.7.2",
+  "version": "1.7.3",
   "displayName": "ToolsEnabled Fleet",
   "description": "Subagents that keep working in parallel, a shared task list, a ledger of rules and questions, and project memory for Claude Code on Linux x86_64.",
   "author": {
