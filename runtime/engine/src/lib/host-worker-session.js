@@ -474,10 +474,15 @@ function createHostWorkerLauncher({ env = process.env, config, workspaceRoot, so
       throw refusal('HOST_WORKSPACE_SYMLINK_REFUSED', 'The sealed Standard workspace changed before Claude started.');
     }
     const settings = path.join(spec.nodeFolder, 'settings.json');
+    // The person's own sign-in settings (see claudeAuthLaunch): sign-in commands
+    // ride in this file, secret values only in the child's environment.
+    const signIn = launchPolicy.claudeAuthLaunch(common.env, { workspace: workspaceRoot });
+    if (signIn.note) process.stderr.write(`[toolsenabled] Fleet did not use part of your Claude sign-in settings: ${signIn.note}.\n`);
     writePrivate(settings,
-      JSON.stringify(require('./claude-workspace-file-tools').settings(SERVER_NAME,
-        { serverEnabled: apiMode !== 'Disabled', workspaceRoot, pathDirectories: String(env.PATH || '').split(path.delimiter) })) + '\n', config.stateRoot);
-    const options = { ...common, onEvent: claudeEvents(spec.onEvent, { workspaceRoot }),
+      JSON.stringify({ ...require('./claude-workspace-file-tools').settings(SERVER_NAME,
+        { serverEnabled: apiMode !== 'Disabled', workspaceRoot, pathDirectories: String(env.PATH || '').split(path.delimiter) }),
+      ...signIn.settings }) + '\n', config.stateRoot);
+    const options = { ...common, env: signIn.env, onEvent: claudeEvents(spec.onEvent, { workspaceRoot }),
       threadOptions: { ...(spec.model ? { model: spec.model } : {}), ...(spec.effort ? { effort: spec.effort } : {}) },
       // Standard replaces saved permission sources with exact workspace file rules.
       plan: { mcpConfig, settings,

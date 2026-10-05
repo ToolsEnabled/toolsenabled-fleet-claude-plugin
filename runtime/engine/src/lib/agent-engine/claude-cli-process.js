@@ -58,20 +58,21 @@ const MAX_CLAUDE_LINE_BYTES = 8_000_000;
  * agentCliEnvironment). Their VALUES must still never reach an observer: any
  * value under one of these names is replaced in the child's stderr before that
  * text is kept or shown (redactCredentials below). */
+// The provider switches (CLAUDE_CODE_USE_*) are not listed: their value is a plain "1",
+// and redacting it would rewrite every "1" in the text.
 const CREDENTIAL_ENV_NAMES = Object.freeze([
   'ANTHROPIC_API_KEY',
   'ANTHROPIC_AUTH_TOKEN',
   'ANTHROPIC_BASE_URL',
   'CLAUDE_CODE_OAUTH_TOKEN',
-  'CLAUDE_CODE_USE_BEDROCK',
-  'CLAUDE_CODE_USE_VERTEX',
-  'CLAUDE_CODE_USE_FOUNDRY',
   'AWS_BEARER_TOKEN_BEDROCK',
   'AWS_BEDROCK_API_KEY',
   'AWS_ACCESS_KEY_ID',
   'AWS_SECRET_ACCESS_KEY',
   'AWS_SESSION_TOKEN'
 ]);
+
+const SECRET_LIKE_NAME = /(?:KEY|TOKEN|SECRET|PASSW(?:OR)?D|CREDENTIAL)/i;
 
 function appendBounded(current, chunk, limit = STDERR_LIMIT) {
   const combined = current + chunk;
@@ -175,7 +176,13 @@ function durableStderrSink(childPid) {
    print a value stored under a spelling an exact-case redactor never finds. */
 function redactCredentials(chunk, env) {
   let output = String(chunk);
-  const secrets = envValues(env, CREDENTIAL_ENV_NAMES).sort((a, b) => b.length - a.length);
+  // Beside the fixed names: any variable whose name says it holds a key, token,
+  // secret or password, because the person's own sign-in settings can bring in
+  // names no fixed list knows (a Foundry key, a cloud provider's token). A short
+  // value is left alone, so a plain "1" is never rewritten through the text.
+  const secretLike = Object.keys(env || {}).filter(name => SECRET_LIKE_NAME.test(name) && !/^CLAUDE_CODE_USE_/i.test(name));
+  const secrets = [...envValues(env, CREDENTIAL_ENV_NAMES), ...envValues(env, secretLike).filter(value => value.length >= 8)]
+    .sort((a, b) => b.length - a.length);
   for (const secret of secrets) output = output.split(secret).join('[REDACTED]');
   return output;
 }
@@ -1165,6 +1172,7 @@ module.exports = {
   // root boundary. An older engine ignoring an optional callback is NOT proof.
   ROOT_ADMISSION_CONTRACT_VERSION: 1,
   CREDENTIAL_ENV_NAMES,
+  redactCredentials,
   MAX_CLAUDE_LINE_BYTES,
   claudeCliFeatures,
   claudeCliVersion,

@@ -263,6 +263,100 @@ function confinedAgentCliEnvironment(baseEnvironment = process.env, { workspace 
   return environment;
 }
 
+/* THE PERSON'S OWN CLAUDE SIGN-IN SETTINGS, FOR A CLAUDE SUBAGENT.
+ *
+ * Fleet starts a Claude subagent without the person's settings files, so a
+ * project's or a user's configuration cannot widen what it may do. That also
+ * dropped every sign-in the person configured in their user settings file: an
+ * apiKeyHelper, a cloud provider's credential commands, or Bedrock, Vertex or
+ * Foundry switches in the file's env block. Measured with `claude auth status`
+ * (Claude Code 2.1.289): signed in with the settings file, signed out with
+ * --setting-sources '' or --restricted, signed in again once the same keys are
+ * passed inline through --settings.
+ *
+ * So the subagent gets back those keys and nothing else of that file:
+ *   - only the USER settings file (CLAUDE_CONFIG_DIR, else ~/.claude), never a
+ *     project or local file, which a repository could supply;
+ *   - only a fixed list of sign-in commands, passed inline through --settings
+ *     (a command is not a secret);
+ *   - only env entries whose names are provider sign-in or endpoint variables.
+ *     Their values go to the child's process environment, in memory: never on
+ *     a command line, never written to disk. A variable already set in the
+ *     person's environment wins, as it does in their terminal.
+ * A file that is not a plain file owned by this account, is writable by others,
+ * lies in a folder a subagent can write, or is over 1 MiB gives nothing. */
+const AUTH_SETTING_COMMANDS = Object.freeze(['apiKeyHelper', 'awsAuthRefresh', 'awsCredentialExport', 'gcpAuthRefresh']);
+const AUTH_SETTING_ENV = Object.freeze([
+  /^CLAUDE_CODE_USE_(?:BEDROCK|VERTEX|FOUNDRY)$/,
+  /^CLAUDE_CODE_SKIP_(?:BEDROCK|VERTEX|FOUNDRY)_AUTH$/,
+  /^ANTHROPIC_(?:API_KEY|AUTH_TOKEN|BASE_URL)$/,
+  /^ANTHROPIC_(?:BEDROCK|VERTEX|FOUNDRY|AWS)_[A-Z0-9_]{1,60}$/,
+  /^ANTHROPIC_VERTEX_PROJECT_ID$/,
+  /^ANTHROPIC_(?:DEFAULT_(?:OPUS|SONNET|HAIKU|FABLE)_MODEL|SMALL_FAST_MODEL)$/,
+  /^CLAUDE_CODE_OAUTH_TOKEN$/,
+  /^AWS_[A-Z0-9_]{1,60}$/,
+  /^CLOUD_ML_REGION$/, /^VERTEX_REGION_[A-Z0-9_]{1,40}$/, /^GOOGLE_APPLICATION_CREDENTIALS$/, /^GCLOUD_PROJECT$/, /^GOOGLE_CLOUD_PROJECT$/,
+]);
+const MAX_AUTH_SETTINGS_BYTES = 1024 * 1024;
+const MAX_AUTH_VALUE = 8192;
+
+function readUserAuthSettings({ env = process.env, workspace = null, extraRoots = [] } = {}) {
+  const none = reason => Object.freeze({ settings: Object.freeze({}), env: Object.freeze({}), note: reason || null });
+  const home = (env && env.HOME) || os.homedir();
+  const folder = env && typeof env.CLAUDE_CONFIG_DIR === 'string' && env.CLAUDE_CONFIG_DIR ? env.CLAUDE_CONFIG_DIR : path.join(home, '.claude');
+  if (!path.isAbsolute(folder)) return none('Claude Code\'s configuration folder is not a full path');
+  const file = path.join(folder, 'settings.json');
+  let real;
+  let stat;
+  try { real = fs.realpathSync(file); stat = fs.statSync(real); } catch { return none(null); }
+  if (!stat.isFile()) return none('the user settings file is not a regular file');
+  // Owned by this account, and not changeable by anyone else. A group-writable
+  // file in the account's own private group is normal (a umask of 002) and is
+  // accepted; one in any other group, or a world-writable one, is not.
+  if (typeof process.getuid === 'function' && (stat.uid !== process.getuid()
+      || (stat.mode & 0o002) !== 0 || ((stat.mode & 0o020) !== 0 && stat.gid !== process.getgid()))) {
+    return none('the user settings file is not owned by this account or can be changed by others (run chmod 600 on it)');
+  }
+  if (stat.size > MAX_AUTH_SETTINGS_BYTES) return none('the user settings file is over 1 MiB');
+  if (insideAny(subagentWritableRoots({ env, workspace, extraRoots }), real)) return none('the user settings file is in a folder a subagent can write');
+  let parsed;
+  try { parsed = JSON.parse(fs.readFileSync(real, 'utf8')); } catch { return none('the user settings file is not valid JSON'); }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return none(null);
+  const settings = {};
+  const dropped = [];
+  for (const key of AUTH_SETTING_COMMANDS) {
+    const command = parsed[key];
+    if (typeof command !== 'string' || command.length === 0 || command.length > MAX_AUTH_VALUE) continue;
+    // A command named by a relative path would run from the subagent's working
+    // folder, which the subagent can write. A full path, ~/ or a bare name found
+    // on the (filtered) PATH is the person's own program.
+    const program = command.trim().split(/\s+/)[0];
+    if (program.includes('/') && !program.startsWith('/') && !program.startsWith('~/')) { dropped.push(key); continue; }
+    settings[key] = command;
+  }
+  const login = parsed.forceLoginMethod;
+  if (login === 'claudeai' || login === 'console') settings.forceLoginMethod = login;
+  const variables = {};
+  const block = parsed.env;
+  if (block && typeof block === 'object' && !Array.isArray(block)) {
+    for (const [name, value] of Object.entries(block)) {
+      if (typeof value !== 'string' || value.length === 0 || value.length > MAX_AUTH_VALUE || /[\0\r\n]/.test(value)) continue;
+      if (!AUTH_SETTING_ENV.some(pattern => pattern.test(name))) continue;
+      if (env && Object.hasOwn(env, name)) continue;
+      variables[name] = value;
+    }
+  }
+  return Object.freeze({ settings: Object.freeze(settings), env: Object.freeze(variables),
+    note: dropped.length ? `${dropped.join(' and ')} names a program by a relative path, which Fleet does not run from a subagent's folder (use a full path)` : null });
+}
+
+/* The environment and the --settings keys a Claude subagent, and the setup
+   sign-in check, run with. A new environment object; the caller's is unchanged. */
+function claudeAuthLaunch(baseEnvironment, { workspace = null, extraRoots = [] } = {}) {
+  const found = readUserAuthSettings({ env: baseEnvironment, workspace, extraRoots });
+  return Object.freeze({ env: { ...baseEnvironment, ...found.env }, settings: found.settings, note: found.note });
+}
+
 /* A pinned CLI path, checked again just before a launch: still absolute,
    still an executable file, and neither it nor its real path inside a folder
    a subagent can write. */
@@ -296,6 +390,8 @@ module.exports = Object.freeze({
   agentCliEnvironment,
   agentSearchPath,
   assertAgentCliPath,
+  claudeAuthLaunch,
+  readUserAuthSettings,
   confinedAgentCliEnvironment,
   assertNoBillingCredentials,
   credentialFreeEnvironment,

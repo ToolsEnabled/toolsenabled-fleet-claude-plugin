@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "files": {
     ".claude-plugin/marketplace.json": {
-      "sha256": "9796a14b8edcbcca3bc2583ee07c7cd4be8ebfd54cee8a6346e6e581d9236169",
+      "sha256": "98b8588f99915b54da66c3065184f355156b5ed7a64c95f80f21c9171a4962ee",
       "executable": false
     },
     ".claude-plugin/plugin.json": {
-      "sha256": "b7ed618e3af14c1a85ede7bcdfed387fe3e05531ee364a3e065273b3cbe476d3",
+      "sha256": "417adbe309c4eb96213714221b8648000a685c606da2c79ceb39a71776fe19fb",
       "executable": false
     },
     ".mcp.json": {
@@ -18,15 +18,15 @@
       "executable": false
     },
     "LOCAL-PATCHES.json": {
-      "sha256": "64b1b965f7b3638f100304a67c6dec1cd37957ecccedbae469fdaf103927f00a",
+      "sha256": "90ad818c33c6fffb11c244ad1451fa8ac402666f80df87662a502090985677f5",
       "executable": false
     },
     "PRIVACY.md": {
-      "sha256": "b705aa64aef97f540ed7e663d52ec38c96e96a9d9ca5deadafdf151b3fabb33a",
+      "sha256": "ac4faaf079af4cb382707e0c46a3ab00b52be2d2cafb1b4433a6c1c65f5226ac",
       "executable": false
     },
     "README.md": {
-      "sha256": "23173d8609df19868fe6f6e48f02eacc137faf0c610ab8503df301c19567015e",
+      "sha256": "7ab1e1c0f8e9dcf3457425455a77f3cb544520f256626d15e4c2b181566ff61e",
       "executable": false
     },
     "RECOVERY.md": {
@@ -34,7 +34,7 @@
       "executable": false
     },
     "SOURCE-PINS.json": {
-      "sha256": "2e0a4719a2b2bda1a3692b9ec1bfc3890e5cfa9d5afe0b6b861cff194cecaf2c",
+      "sha256": "43bce55f3ff0f9b695064a282d5f848d705548cd1ce176d08a9a1c2e374094c8",
       "executable": false
     },
     "commands/tefleet.md": {
@@ -42,7 +42,7 @@
       "executable": false
     },
     "docs/CLAUDE-INSTALL.md": {
-      "sha256": "d82f2cca23d98444c4037baab449d3404b90bb4c81811e7e4224f8ca45336b86",
+      "sha256": "23267f045737d50bdf6c24c37596009842ac02e62bebf142d041f27695c7762a",
       "executable": false
     },
     "hooks/fleet.test.ts": {
@@ -210,7 +210,7 @@
       "executable": false
     },
     "runtime/engine/src/lib/agent-engine/claude-cli-process.js": {
-      "sha256": "d4a4e97b07262cc754076d83db4b54462d7a595766e3a41281d01c0e63d79445",
+      "sha256": "5d6a4d101415789b2d1578b96d392f9976aef3ab3e145a032d50c99bfc503d60",
       "executable": false
     },
     "runtime/engine/src/lib/agent-engine/codex-adapter.js": {
@@ -470,7 +470,7 @@
       "executable": false
     },
     "runtime/engine/src/lib/host-worker-session.js": {
-      "sha256": "991cc7792e4efe22fd39bc3aa65b51817edaba8925b1538c37b584549c7dfb71",
+      "sha256": "ebab86d4dae85ea59d55dda656f787ed7bcadabbed20ffe7c15621e7a61ced59",
       "executable": false
     },
     "runtime/engine/src/lib/installed-role-memory.js": {
@@ -726,7 +726,7 @@
       "executable": false
     },
     "runtime/engine/src/lib/supervision/launch-environment.js": {
-      "sha256": "55b962256de953853193abea90f2bece36ca278c701545dde118788781acd3c4",
+      "sha256": "e3034f127be64264f916b8a181552848628d6e80f2b3631f460f76032ba19898",
       "executable": false
     },
     "runtime/engine/src/lib/system-status.js": {
@@ -802,11 +802,11 @@
       "executable": false
     },
     "setup-entry.js": {
-      "sha256": "2674d616ff5502e7e7b2482f197e3daad036ab7d8ba9428d03d0dc5507917d22",
+      "sha256": "0d95255d535c95a7835deff6b80493ba20fb890a064b4c83714c27fff92c420b",
       "executable": false
     },
     "setup-server.js": {
-      "sha256": "efb37d524235ded9d0afbe561641527834554030a2842d62e9dcf6b0ebb6a9b3",
+      "sha256": "9a08bd43874f8b572686969d009f9b45143463a6ececace107e0e8868d176cfe",
       "executable": false
     },
     "skills/toolsenabled-fleet/SKILL.md": {

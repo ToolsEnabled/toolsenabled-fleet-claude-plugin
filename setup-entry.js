@@ -161,9 +161,21 @@ function survey(config, { env = process.env, run = spawnSync, workspace = null }
   const ready = [];
   const signedOut = [];
   const noSandbox = [];
+  const notes = {};
   for (const cli of found) {
     const info = SUBAGENT_CLIS[cli.name];
-    const result = run(cli.file, info.status, { env: clean, stdio: 'ignore', timeout: 15000 });
+    // A Claude subagent starts without the person's settings files but with
+    // their sign-in settings, so the check runs the way the subagent will:
+    // "ready" must mean the subagent can sign in.
+    let statusArgs = info.status;
+    let statusEnv = clean;
+    if (cli.name === 'claude') {
+      const signIn = launch.claudeAuthLaunch(clean, { workspace });
+      statusEnv = signIn.env;
+      statusArgs = ['--setting-sources', '', ...(Object.keys(signIn.settings).length ? ['--settings', JSON.stringify(signIn.settings)] : []), ...info.status];
+      if (signIn.note) notes[cli.name] = signIn.note;
+    }
+    const result = run(cli.file, statusArgs, { env: statusEnv, stdio: 'ignore', timeout: 15000 });
     if (result.status !== 0) { signedOut.push(cli.name); continue; }
     if (info.sandbox && workspace && fs.existsSync(workspace)) {
       const probe = run(cli.file, info.sandbox.args(workspace), { cwd: workspace, env: clean, encoding: 'utf8',
@@ -172,10 +184,11 @@ function survey(config, { env = process.env, run = spawnSync, workspace = null }
     }
     ready.push(cli.name);
   }
-  return { installed: found.map(cli => cli.name), ready, signedOut, noSandbox };
+  return { installed: found.map(cli => cli.name), ready, signedOut, noSandbox, notes };
 }
-function signInHint(name) {
-  return `${name} is installed but not signed in. To use it for subagents, run \`${SUBAGENT_CLIS[name].signIn}\` once in a terminal, then run ${SETUP_COMMAND} again.`;
+function signInHint(name, status = {}) {
+  const why = status.notes && status.notes[name] ? ` Fleet could not use your sign-in settings because ${status.notes[name]}.` : '';
+  return `${name} is installed but not signed in.${why} To use it for subagents, run \`${SUBAGENT_CLIS[name].signIn}\` once in a terminal, then run ${SETUP_COMMAND} again.`;
 }
 function sandboxHint(name) {
   return `${name} is signed in, but its sandbox cannot start on this computer, so its subagents could not edit files. Follow ${SUBAGENT_CLIS[name].sandbox.help}, then run ${SETUP_COMMAND} again.`;
@@ -184,7 +197,7 @@ function surveyNote(status) {
   if (!status.installed.length) {
     return `Subagents are off because no supported agent CLI (${Object.keys(SUBAGENT_CLIS).join(', ')}) was found on PATH. Install one, sign in, then run ${SETUP_COMMAND} again.`;
   }
-  return [...status.signedOut.map(signInHint), ...status.noSandbox.map(sandboxHint)].join('\n');
+  return [...status.signedOut.map(name => signInHint(name, status)), ...status.noSandbox.map(sandboxHint)].join('\n');
 }
 // The person may name which signed-in CLIs subagents use; by default all of them.
 function chosenProviders(status, list) {
@@ -194,7 +207,7 @@ function chosenProviders(status, list) {
   if (!asked.length || unknown.length) throw new Error(`Choose subagent CLIs from: ${Object.keys(SUBAGENT_CLIS).join(', ')}.`);
   const unavailable = asked.filter(name => !status.ready.includes(name));
   if (unavailable.length) {
-    throw new Error(unavailable.map(name => (status.signedOut.includes(name) ? signInHint(name)
+    throw new Error(unavailable.map(name => (status.signedOut.includes(name) ? signInHint(name, status)
       : status.noSandbox.includes(name) ? sandboxHint(name) : `${name} is not installed on PATH.`)).join(' '));
   }
   return Object.keys(SUBAGENT_CLIS).filter(name => asked.includes(name));
