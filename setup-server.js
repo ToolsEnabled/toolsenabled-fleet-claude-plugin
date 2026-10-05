@@ -1,7 +1,8 @@
 'use strict';
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const VERSION = '1.7.5';
+const { childEnvironment } = require('./runtime-config');
+const VERSION = '1.8.0';
 const PROTOCOLS = Object.freeze(['2024-11-05', '2025-03-26', '2025-06-18']);
 const guidance = 'Fleet is installed but not set up for this project. Type /tefleet setup (or ask Claude to set up Fleet) and approve the setup tool. Fleet\'s tools then appear in this session.';
 // Fleet works in one project at a time; from any other project it offers to move.
@@ -54,7 +55,7 @@ function runSetup(workspace, { providers, run = spawnSync, env = process.env,
   if (refusal) return { ok: false, result: text(`Fleet setup did not finish: ${refusal}`, true) };
   const result = run(process.execPath, [path.join(__dirname, 'setup-entry.js'), '--setup', workspace,
     ...(providers ? ['--providers', providers.join(',')] : [])],
-    { env, encoding: 'utf8', timeout: 60000, maxBuffer: 1024 * 1024 });
+    { env: childEnvironment(env), encoding: 'utf8', timeout: 60000, maxBuffer: 1024 * 1024 });
   if (result.status !== 0) {
     const detail = String(result.stderr || result.error?.message || 'Setup failed.')
       .replace(/^Fleet setup failed:\s*/, '').replace(/^[A-Z][A-Z0-9_]+:\s*/, '').trim();
@@ -73,7 +74,7 @@ function runSetup(workspace, { providers, run = spawnSync, env = process.env,
 // Binds the saved setup to this plugin version, keeping the person's choices.
 function runRebind({ run = spawnSync, env = process.env } = {}) {
   const result = run(process.execPath, [path.join(__dirname, 'setup-entry.js'), '--rebind'],
-    { env, encoding: 'utf8', timeout: 60000, maxBuffer: 1024 * 1024 });
+    { env: childEnvironment(env), encoding: 'utf8', timeout: 60000, maxBuffer: 1024 * 1024 });
   return result.status === 0;
 }
 

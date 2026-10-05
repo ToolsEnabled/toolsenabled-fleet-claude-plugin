@@ -23,6 +23,11 @@ function resolveConfig(env = process.env, home = os.homedir()) {
   const stateRoot = absolute(env.TOOLSENABLED_FLEET_STATE_ROOT || path.join(home, '.toolsenabled-fleet-plugin'), 'state_root');
   return Object.freeze({ mode, stateRoot, engine });
 }
+// The environment of a process Fleet starts for itself: the person's own, without
+// any provider sign-in variable, whoever the provider is.
+function childEnvironment(env = process.env) {
+  return require(path.join(engine, 'src/lib/supervision/launch-environment')).safeLaunchEnvironment(env, { context: 'Fleet helper' });
+}
 function configureEnvironment(config, env = process.env) {
   // Empty optional forwarded variables mean absent, never a relative path.
   for (const name of require('./startup-env.json')) if (env[name] === '') delete env[name];
@@ -35,4 +40,4 @@ function configureEnvironment(config, env = process.env) {
   env.LOCALAPPDATA = config.stateRoot;
   return config;
 }
-module.exports = { engine, absolute, resolveConfig, configureEnvironment, assertRuntimeMode };
+module.exports = { engine, absolute, resolveConfig, configureEnvironment, childEnvironment, assertRuntimeMode };

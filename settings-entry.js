@@ -2,7 +2,7 @@
 'use strict';
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { resolveConfig, configureEnvironment } = require('./runtime-config');
+const { resolveConfig, configureEnvironment, childEnvironment } = require('./runtime-config');
 // Fleet's settings. Depth, width, the Agent API mode and audit are the engine's
 // own settings; providers and models are saved by setup, so changing them runs
 // setup again for the same project (which re-checks each agent CLI). Changes
@@ -15,7 +15,7 @@ const SETTINGS = Object.freeze({
   audit: Object.freeze({ id: 'audit.enabled', toggle: true }),
 });
 function run(args, what, { cwd, env = process.env } = {}) {
-  const result = spawnSync(process.execPath, args, { cwd, env, encoding: 'utf8', timeout: 60000, maxBuffer: 1024 * 1024 });
+  const result = spawnSync(process.execPath, args, { cwd, env: childEnvironment(env), encoding: 'utf8', timeout: 60000, maxBuffer: 1024 * 1024 });
   if (result.status !== 0) {
     throw new Error(String(result.stderr || result.error?.message || `${what} failed.`).replace(/^Fleet setup failed:\s*/, '').trim());
   }

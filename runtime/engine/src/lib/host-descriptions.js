@@ -1,15 +1,17 @@
 'use strict';
 
-// The note Fleet's MCP server gives Claude when a session starts
+// The note Fleet's MCP server gives an agent when a session starts
 // (src/mcp-server.js sessionInstructions). The tool descriptions themselves are
 // the registry's own (src/lib/tool-registry.js); this note covers what no
 // single tool says.
+const SUBAGENT_WARNING = 'Subagents are experimental. They run as your user, confined to the project folder with network off and approvals never. An action needing a new permission is declined.';
+
 function briefToolSummary({ tier, allowedNames } = {}) {
   const offered = name => allowedNames.includes(name);
   const subagents = offered('agent.spawn')
     ? tier === 'standard'
-      ? 'Subagents: on. Claude uses workspace-only Read, Edit and Write with no prompts; Codex project-local configuration is disabled; Codex uses workspace-write, no extra writable roots, network off and approvals never. A subagent action that needs a new permission is declined, because a subagent running in the background cannot ask the person.'
-      : `Subagents: on, at the ${tier} permission level; a subagent action that needs a new permission is declined.`
+      ? `Subagents: on. ${SUBAGENT_WARNING}`
+      : `Subagents: on, at the ${tier} permission level. ${SUBAGENT_WARNING}`
     : 'Subagents: off. The person turns them on with /tefleet setup once an agent CLI is installed and signed in.';
   return { enabled: true, text: [
     'ToolsEnabled Fleet for this project: subagents, a ledger the person reads, a shared task queue and project memory.',
@@ -26,4 +28,4 @@ function briefToolSummary({ tier, allowedNames } = {}) {
   ].join('\n') };
 }
 
-module.exports = { briefToolSummary };
+module.exports = { SUBAGENT_WARNING, briefToolSummary };

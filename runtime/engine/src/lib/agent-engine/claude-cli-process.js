@@ -1,10 +1,9 @@
 'use strict';
 
-/* SPAWNING THE claude BINARY, AND NOTHING ELSE.
+/* SPAWNING THE claude BINARY.
  *
- * This is the transport half of the Claude engine; the protocol mapping lives
- * in claude-cli-adapter.js. Read that file's header first -- it carries the
- * sign-in rule and every event shape.
+ * This is the transport half of this provider adapter; protocol mapping lives
+ * in claude-cli-adapter.js.
  *
  * The CLAUDE_CONFIG_DIR rule has three parts:
  *
@@ -14,9 +13,7 @@
  *   b. NO DIRECTORY MEANS THE DEFAULT PATH. With no `configDir` the
  *      child gets its environment unchanged and signs itself in through the
  *      normal flow. Fleet's subagents name no directory.
- *   c. THE CREDENTIAL IS NEVER READ BY THIS PRODUCT. The customer signs in with
- *      `claude auth login` for the selected directory; this module names the
- *      directory and the official program performs authentication.
+ *   c. The official program handles authentication for its selected directory.
  */
 
 const { spawnHidden, waitForRootSpawn } = require('../proc/hidden-spawn');
@@ -26,7 +23,6 @@ const fs = require('node:fs');
 const toolchain = require('../providers/provider-toolchain');
 const { ClaudeCliAdapter, ClaudeCliError, claudeArgs, claudeResumeArgs, claudeForkArgs, nativeModePolicyFor } = require('./claude-cli-adapter');
 const { resumeRefusalFor } = require('./resume-provider-guard');
-const { envValues } = require('../env-scrub');
 const { agentCliEnvironment } = require('../supervision/launch-environment');
 /* THE ONE CANDIDATE LIST. Where `claude` may be and what its version does
  * with a model alias both live in ./claude-cli-install.js, and this file
@@ -50,29 +46,6 @@ const STDERR_LIMIT = 64 * 1024;
    malformed-input door, not an aggregate event limit: complete well-formed
    lines remain deliverable, while an unframed line cannot grow forever. */
 const MAX_CLAUDE_LINE_BYTES = 8_000_000;
-
-/* THE CLI'S OWN SIGN-IN VARIABLES, kept for one purpose: redaction.
- *
- * The child runs on the person's own sign-in exactly as their terminal would,
- * so these variables reach it unchanged (src/lib/supervision/launch-environment.js
- * agentCliEnvironment). Their VALUES must still never reach an observer: any
- * value under one of these names is replaced in the child's stderr before that
- * text is kept or shown (redactCredentials below). */
-// The provider switches (CLAUDE_CODE_USE_*) are not listed: their value is a plain "1",
-// and redacting it would rewrite every "1" in the text.
-const CREDENTIAL_ENV_NAMES = Object.freeze([
-  'ANTHROPIC_API_KEY',
-  'ANTHROPIC_AUTH_TOKEN',
-  'ANTHROPIC_BASE_URL',
-  'CLAUDE_CODE_OAUTH_TOKEN',
-  'AWS_BEARER_TOKEN_BEDROCK',
-  'AWS_BEDROCK_API_KEY',
-  'AWS_ACCESS_KEY_ID',
-  'AWS_SECRET_ACCESS_KEY',
-  'AWS_SESSION_TOKEN'
-]);
-
-const SECRET_LIKE_NAME = /(?:KEY|TOKEN|SECRET|PASSW(?:OR)?D|CREDENTIAL)/i;
 
 function appendBounded(current, chunk, limit = STDERR_LIMIT) {
   const combined = current + chunk;
@@ -98,8 +71,9 @@ function appendBounded(current, chunk, limit = STDERR_LIMIT) {
  *
  * BOUNDED THREE WAYS, because a log that fills a disk is its own incident: 256
  * KB per session, 50 files kept in the directory, and nothing written after the
- * cap. WRITTEN AFTER REDACTION, on the redacted chunk, so a credential that
- * reached the environment cannot reach the file either.
+ * cap. The child's environment holds no provider credential (see
+ * agentCliEnvironment), so it has none of its own to print; Fleet does not read
+ * the log for sign-in values.
  *
  * SYNCHRONOUS, and that is a considered cost rather than an oversight: this is
  * the stderr of one child, it is silent in a healthy session, and 256 KB is the
@@ -169,31 +143,13 @@ function durableStderrSink(childPid) {
   }
 }
 
-/* Redact any credential VALUE that still reached the environment, before its
-   text can reach an observer. Mirrors claude-process.js, including the reason
-   that file gives: the lookup must be case-insensitive, because a child
-   resolves environment names through a case-insensitive OS and can therefore
-   print a value stored under a spelling an exact-case redactor never finds. */
-function redactCredentials(chunk, env) {
-  let output = String(chunk);
-  // Beside the fixed names: any variable whose name says it holds a key, token,
-  // secret or password, because the person's own sign-in settings can bring in
-  // names no fixed list knows (a Foundry key, a cloud provider's token). A short
-  // value is left alone, so a plain "1" is never rewritten through the text.
-  const secretLike = Object.keys(env || {}).filter(name => SECRET_LIKE_NAME.test(name) && !/^CLAUDE_CODE_USE_/i.test(name));
-  const secrets = [...envValues(env, CREDENTIAL_ENV_NAMES), ...envValues(env, secretLike).filter(value => value.length >= 8)]
-    .sort((a, b) => b.length - a.length);
-  for (const secret of secrets) output = output.split(secret).join('[REDACTED]');
-  return output;
-}
-
 /* THE ENVIRONMENT THE CHILD ACTUALLY GETS.
  *
  * `env === undefined` means the ambient environment, never a raw inherit: the
- * same policy applies either way. The person's own sign-in variables are kept
- * and only the lead session's bindings (session ids, messaging socket, IDE
- * binding, Fleet's internal variables) are removed, by the one function the
- * setup sign-in check also uses (agentCliEnvironment).
+ * same policy applies either way. The lead session's bindings (session ids,
+ * messaging socket, IDE binding, Fleet's internal variables) and every provider
+ * sign-in variable are removed, by the one function the setup sign-in check also
+ * uses (agentCliEnvironment).
  *
  * PATH SURVIVES, and must: it is how `claude` is found at all. */
 function launchEnvironment(env) {
@@ -590,8 +546,6 @@ function createClaudeCliTransport({
     ...(credentialEnvironment ? { credentialEnvironment } : {}),
     ...(rootLaunch ? { rootLaunch } : {})
   });
-  // What the child can print includes what it was given after the scrub.
-  const redactionEnv = credentialEnvironment ? { ...childEnv, ...credentialEnvironment } : childEnv;
   const rootReady = rootLaunch ? waitForRootSpawn(child) : null;
   rootReady?.catch(() => {});
   const startupCleanup = createStartupCleanup(child);
@@ -614,9 +568,8 @@ function createClaudeCliTransport({
      without running its shutdown. */
   const sink = stderrSink(child.pid);
   child.stderr.on('data', chunk => {
-    const redacted = redactCredentials(chunk, redactionEnv);
-    stderr = appendBounded(stderr, redacted);
-    if (sink) sink(redacted);
+    stderr = appendBounded(stderr, chunk);
+    if (sink) sink(chunk);
   });
 
   function pauseSource() {
@@ -1083,7 +1036,6 @@ async function restoreClaudeSession({
       newThreadId = (await seed.startThread(threadOptions)).threadId;
       seed.close();
       // The shell's private source receipt supplies this bounded operation.
-      // This transport never reads a provider home or a credential itself.
       forkSource.assertSource();
       cleanup = forkSource.stageSource(facts.configDir);
       if (typeof cleanup !== 'function') throw new ClaudeCliError('CLAUDE_EDITOR_FORK_INVALID', 'The source import did not return its cleanup contract.');
@@ -1171,8 +1123,6 @@ module.exports = {
   // Paired app contract: both start/resume retain the real child and await its
   // root boundary. An older engine ignoring an optional callback is NOT proof.
   ROOT_ADMISSION_CONTRACT_VERSION: 1,
-  CREDENTIAL_ENV_NAMES,
-  redactCredentials,
   MAX_CLAUDE_LINE_BYTES,
   claudeCliFeatures,
   claudeCliVersion,

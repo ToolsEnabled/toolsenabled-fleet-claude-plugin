@@ -24,42 +24,6 @@
       "phasePriority": []
     },
     {
-      "id": "astra",
-      "displayName": "Astra",
-      "role": "builder",
-      "provider": "codex",
-      "enabled": true,
-      "assignedPhase": null,
-      "phasePriority": []
-    },
-    {
-      "id": "luna",
-      "displayName": "Luna",
-      "role": "builder",
-      "provider": "codex",
-      "enabled": true,
-      "assignedPhase": null,
-      "phasePriority": []
-    },
-    {
-      "id": "terra",
-      "displayName": "Terra",
-      "role": "builder",
-      "provider": "codex",
-      "enabled": true,
-      "assignedPhase": null,
-      "phasePriority": []
-    },
-    {
-      "id": "sol",
-      "displayName": "Sol",
-      "role": "builder",
-      "provider": "codex",
-      "enabled": true,
-      "assignedPhase": null,
-      "phasePriority": []
-    },
-    {
       "id": "claude-1",
       "displayName": "Claude seat 1",
       "role": "builder",
@@ -91,6 +55,42 @@
       "displayName": "Claude seat 4",
       "role": "builder",
       "provider": "claude",
+      "enabled": true,
+      "assignedPhase": null,
+      "phasePriority": []
+    },
+    {
+      "id": "astra",
+      "displayName": "Codex seat 1",
+      "role": "builder",
+      "provider": "codex",
+      "enabled": true,
+      "assignedPhase": null,
+      "phasePriority": []
+    },
+    {
+      "id": "luna",
+      "displayName": "Codex seat 2",
+      "role": "builder",
+      "provider": "codex",
+      "enabled": true,
+      "assignedPhase": null,
+      "phasePriority": []
+    },
+    {
+      "id": "terra",
+      "displayName": "Codex seat 3",
+      "role": "builder",
+      "provider": "codex",
+      "enabled": true,
+      "assignedPhase": null,
+      "phasePriority": []
+    },
+    {
+      "id": "sol",
+      "displayName": "Codex seat 4",
+      "role": "builder",
+      "provider": "codex",
       "enabled": true,
       "assignedPhase": null,
       "phasePriority": []
@@ -135,26 +135,6 @@
   "relationships": [
     {
       "from": "controller",
-      "to": "astra",
-      "type": "manages"
-    },
-    {
-      "from": "controller",
-      "to": "luna",
-      "type": "manages"
-    },
-    {
-      "from": "controller",
-      "to": "terra",
-      "type": "manages"
-    },
-    {
-      "from": "controller",
-      "to": "sol",
-      "type": "manages"
-    },
-    {
-      "from": "controller",
       "to": "claude-1",
       "type": "manages"
     },
@@ -171,6 +151,26 @@
     {
       "from": "controller",
       "to": "claude-4",
+      "type": "manages"
+    },
+    {
+      "from": "controller",
+      "to": "astra",
+      "type": "manages"
+    },
+    {
+      "from": "controller",
+      "to": "luna",
+      "type": "manages"
+    },
+    {
+      "from": "controller",
+      "to": "terra",
+      "type": "manages"
+    },
+    {
+      "from": "controller",
+      "to": "sol",
       "type": "manages"
     },
     {

@@ -116,7 +116,7 @@ const MANAGER_STOP_NOTE = 'Stopped by the assistant above it.';
 const CLOSE_GRACE_MS = 4000;
 
 const TIER_CLASSES = Object.freeze(['cheap', 'standard', 'premium']);
-const WORKER_PROVIDERS = Object.freeze(['codex', 'claude']);
+const { PROVIDER_ORDER: WORKER_PROVIDERS } = require('./openshell-worker-providers');
 // A provider change keeps the slot's tier class: these are each provider's rows for it.
 const PROVIDER_CLASS_TIERS = Object.freeze({
   codex: Object.freeze({ cheap: 'luna', standard: 'terra', premium: 'sol' }),
@@ -928,7 +928,7 @@ function createOpenShellAgentHost({
     }
     const row = tiers && Object.prototype.hasOwnProperty.call(tiers, request.tier) ? tiers[request.tier] : null;
     if (!isWorkerTier(row)) {
-      throw refusal('OPENSHELL_AGENT_PROVIDER_UNSUPPORTED', 'Choose a Codex or Claude worker tier. Nothing was started.');
+      throw refusal('OPENSHELL_AGENT_PROVIDER_UNSUPPORTED', 'Choose one of the tiers agent.spawn lists. Nothing was started.');
     }
     if (typeof request.brief !== 'string' || request.brief.trim() === '') {
       throw refusal('OPENSHELL_AGENT_BRIEF_REQUIRED', 'A worker needs its opening message. Nothing was started.');

@@ -1,6 +1,6 @@
 'use strict';
 
-// Compatibility labels for the canonical mode resolved once by settings.js.
+// Compatibility labels stay distinct in storage. Execution uses one tool set.
 const { AGENT_API_SETTING_ID, TOOL_MODE_SETTING_ID, TOOL_MODES, normalizeAgentApiMode } = require('./agent-api-mode');
 const SETTING_ID = TOOL_MODE_SETTING_ID;
 const LEGACY_SETTING_ID = AGENT_API_SETTING_ID;
@@ -19,7 +19,7 @@ function toolMode(options = {}) {
   const settings = (options.loadSettings || require('./settings').loadSettings)(options);
   return modeFromSettings(settings);
 }
-function toolsEnabledAvailable(options = {}) { return toolMode(options) !== MODE.NATIVE; }
+function toolsEnabledAvailable(options = {}) { toolMode(options); return true; }
 function executionToolMode(context = {}) {
   // Trusted in-process bindings outrank ambient launch state. When both bound
   // representations are supplied they must agree; a tool request cannot choose.
@@ -33,11 +33,10 @@ function executionToolMode(context = {}) {
         || (!canonical && bound === undefined)) {
       throw Object.assign(new Error('The bound session tool mode is invalid or conflicting.'), { code: 'AGENT_TOOL_MODE_INVALID' });
     }
-    return canonical ? TOOL_MODES[canonical] : bound;
+    return MODE.ONLY;
   }
-  return toolMode();
+  toolMode();
+  return MODE.ONLY;
 }
-function assertToolsEnabled(context = {}) {
-  if (executionToolMode(context) === MODE.NATIVE) throw Object.assign(new Error('ToolsEnabled API calls are disabled for this session. Its tool mode allows provider-native tools only. Choose a ToolsEnabled mode in Settings and start a new session to use this API.'), { code: 'TOOL_API_DISABLED' });
-}
+function assertToolsEnabled(context = {}) { executionToolMode(context); }
 module.exports = Object.freeze({ SETTING_ID, LEGACY_SETTING_ID, MODE, MODES, DEFAULT_MODE, modeFromSettings, toolMode, toolsEnabledAvailable, executionToolMode, assertToolsEnabled });

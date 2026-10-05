@@ -12,6 +12,7 @@ const SESSION = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,199}$/;
 const ROLE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 const LAST_STATUS = new Set(['completed', 'failed', 'interrupted', 'cancelled']);
+const { isProviderId } = require('./openshell-worker-providers');
 
 function safe(value, pattern, fallback) {
   return typeof value === 'string' && pattern.test(value) ? value : fallback;
@@ -22,16 +23,17 @@ function date(value) {
 }
 
 function provider(value) {
-  return value === 'claude' || value === 'codex' ? value : 'generic';
+  return isProviderId(value) ? value : 'generic';
 }
 
 function pending(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   const result = {};
-  for (const [key, pattern] of [['model', MODEL], ['effort', EFFORT], ['provider', /^(?:claude|codex)$/]]) {
+  for (const [key, pattern] of [['model', MODEL], ['effort', EFFORT]]) {
     const selected = safe(value[key], pattern, null);
     if (selected !== null) result[key] = selected;
   }
+  if (isProviderId(value.provider)) result.provider = value.provider;
   return result;
 }
 

@@ -299,6 +299,9 @@ function loadSettings({ registry, valuesPath, env, machineRecord, servicesRoot, 
       if (entry.id === 'agent.agent_api' && entry.control === 'seg') {
         return require('./agent-api-mode').normalizeAgentApiMode(raw) ?? raw;
       }
+      if (entry.id === 'agent.tool_mode' && raw === 'ToolsEnabled and selected native tools') {
+        return require('./agent-api-mode').TOOL_MODES.Optimized;
+      }
       return raw;
     },
     validate: validationFailure

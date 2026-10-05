@@ -1,6 +1,7 @@
 'use strict';
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { childEnvironment } = require('./runtime-config');
 // Setup stays available after setup, so a person can move Fleet to another project.
 const { runSetup, setupTool, statusTool, elsewhereGuidance, VERSION } = require('./setup-server');
 // Fleet's settings, shown read-only; only the person changes them.
@@ -33,7 +34,7 @@ const INIT_ID = 'fleet-bridge-initialize';
 // initializes the engine itself, then tells the client its tool list changed.
 async function serveSession(config, { input = process.stdin, output = process.stdout,
   launch = () => spawn(process.execPath, [path.join(__dirname, 'runtime-entry.js')],
-    { env: process.env, stdio: ['pipe', 'pipe', 'inherit'] }), readTrees, projectTrees, setup = runSetup, settings = runSettings,
+    { env: childEnvironment(), stdio: ['pipe', 'pipe', 'inherit'] }), readTrees, projectTrees, setup = runSetup, settings = runSettings,
   preInitialized = null, initialBuffer = '', readSetup = () => savedSetup(config.stateRoot), watchMs = 2000 } = {}) {
   const state = path.join(config.stateRoot, 'workers');
   const loadTrees = readTrees || (() => require(path.join(config.engine, 'src/lib/openshell-tree-store')).listTrees(state));

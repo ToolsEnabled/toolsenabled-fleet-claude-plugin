@@ -8,10 +8,10 @@ const path = require('node:path');
 
 const INSTALL_ROOT = path.resolve(__dirname, '../..');
 const HOST_WARNING = 'Fleet runs on your computer with your own permissions and network. It does not provide a sandbox, network confinement or credential custody for your agent CLIs.';
-const WORKER_WARNING = 'Subagents are experimental. They run as your user. Standard Codex workers disable project-local Codex configuration and use workspace-write limited to the project folder (no /tmp, $TMPDIR or other extra writable roots), network off and approvals never. Trust entries written by earlier Fleet launches remain in CODEX_HOME/config.toml. Other native CLI sandbox settings remain active; requests needing fresh permission are denied in headless workers. Run those actions through your own CLI session.';
+const WORKER_WARNING = require('./host-descriptions').SUBAGENT_WARNING;
 
 // Agent CLIs the plugin can start as subagents, as equal entries.
-const SUBAGENT_PROVIDERS = Object.freeze(['claude', 'codex']);
+const { PROVIDER_ORDER: SUBAGENT_PROVIDERS } = require('./openshell-worker-providers');
 
 function refuse(code, message) { throw Object.assign(new Error(`${code}: ${message}`), { code }); }
 
@@ -69,8 +69,7 @@ function checkPrivateTree(root) {
 
 // A plugin's state (its limits, ledger, standing rules and tree record) must
 // not sit where a subagent can write: the project, /tmp or the temporary
-// folder, which Codex's workspace-write sandbox makes writable unless told
-// otherwise.
+// folder, which a worker sandbox can make writable unless told otherwise.
 function refuseSubagentWritableStateRoot(stateRoot, { workspace = null, env = process.env } = {}) {
   const roots = require('./supervision/launch-environment').subagentWritableRoots({ env, workspace });
   let real = stateRoot;
@@ -86,8 +85,8 @@ function refuseSubagentWritableStateRoot(stateRoot, { workspace = null, env = pr
 
 function readHostConfig(stateRoot, { allowPluginRebind = false, setupKind = null } = {}) {
   const setupRequired = setupKind === 'plugin'
-    ? 'Run /tefleet setup in Claude Code to configure this plugin.'
-    : 'Run /tefleet setup in Claude Code to set up Fleet.';
+    ? 'Run /tefleet setup in your agent CLI to configure this plugin.'
+    : 'Run /tefleet setup in your agent CLI to set up Fleet.';
   absolute(stateRoot, 'State root');
   noLinkedAncestors(stateRoot);
   try { checkPrivateTree(stateRoot); }
@@ -144,7 +143,7 @@ function validProviderList(list, { setupKind = 'plugin', workers = true } = {}) 
     && new Set(list).size === list.length && list.every(name => SUBAGENT_PROVIDERS.includes(name));
 }
 
-// ...and to some of those providers' models (tier names such as terra or claude-sonnet).
+// ...and to some of those providers' model tiers.
 function validModelList(list, { setupKind = 'plugin', workers = true, providers } = {}) {
   const tiers = require('./fleet-worker-tiers');
   return setupKind === 'plugin' && workers === true && Array.isArray(list) && list.length > 0
@@ -211,7 +210,7 @@ function configureHost(config, { env = process.env, actor } = {}) {
     if (JSON.stringify(existing) !== JSON.stringify(JSON.parse(content))) refuse('HOST_CONFIG_INVALID', 'Local profile marker is inconsistent.');
   }
   // Audit is an option the person turns on (audit.enabled); until then its
-  // tools are not offered to Claude or to subagents.
+  // tools are not offered to connected agents or subagents.
   if (config.setupKind === 'plugin' && !require('./runtime-policy').runtimePolicy().auditEnabled) {
     env.TOOLSENABLED_TOOL_ALLOWLIST = allowed.filter(name => !name.startsWith('audit.')).join(',');
   }
@@ -290,7 +289,7 @@ function setupPluginHost({ stateRoot, workspace, tier = 'standard', workers = fa
   let home = null;
   try { home = fs.realpathSync(os.userInfo().homedir); } catch { /* checked again by setupHost */ }
   if (home && (workspace === home || path.resolve(workspace) === home)) {
-    refuse('HOST_PLUGIN_SETUP_INVALID', 'Fleet needs a project folder, not your home folder. Open a project folder in Claude Code and set up Fleet there.');
+    refuse('HOST_PLUGIN_SETUP_INVALID', 'Fleet needs a project folder, not your home folder. Open a project folder in your agent CLI and set up Fleet there.');
   }
   const overlaps = (left, right) => left === right || left.startsWith(right + path.sep) || right.startsWith(left + path.sep);
   if (overlaps(stateRoot, workspace) || overlaps(stateRoot, INSTALL_ROOT) || overlaps(workspace, INSTALL_ROOT)) {

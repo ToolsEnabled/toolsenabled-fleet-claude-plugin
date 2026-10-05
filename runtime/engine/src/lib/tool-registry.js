@@ -161,37 +161,10 @@ const AGENT_SPAWN_EFFORT_VALUES = Object.freeze([
   'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'
 ]);
 
-/* AND THE NARROWER SET EACH PROVIDER'S OWN LAUNCHER ACCEPTS.
- *
- * A tier row's `effort` column is that tier's DEFAULT, not its allowed set;
- * refusing every effort for a tier whose column is empty would refuse every
- * claude tier.
- *
- *   codex   the chosen effort is passed through as
- *           `-c model_reasoning_effort=<effort>`.
- *
- *   claude  src/lib/agent-engine/claude-cli-adapter.js baseClaudeArgs() maps
- *           `ultra` to `max` (Claude's highest reasoning setting), accepts
- *           low/medium/high/xhigh/max, emits `--effort <value>`, and refuses
- *           anything else with CLAUDE_CLI_EFFORT_UNSUPPORTED. `none` and
- *           `minimal` are the two the eight-value vocabulary has and Claude
- *           does not.
- *
- * WHERE A PROVIDER MAPS A VALUE, THE MAPPING IS APPLIED HERE TOO AND THE
- * RECEIPT ECHOES WHAT WILL ACTUALLY RUN. A receipt reading `ultra` for a
- * Claude circle that is about to be launched with `--effort max` states the
- * request, not the outcome, which is the thing this whole reply is for. The
- * adapter still performs its own mapping -- this is a normalisation of an
- * already-supported value, not a second decision about it -- and
- * tests/agent-spawn-tree-surface.test.js proves the two agree by calling the
- * adapter's own claudeArgs() rather than by matching this list against its
- * source text. */
-/* CODEX TAKES THE SIX ITS CATALOG LISTS, NOT ALL EIGHT. Every Codex model
- * this table names lists low, medium, high, xhigh, max and ultra in Codex's
- * own model catalog -- gpt-5.6-luna without ultra, which its tier row states
- * in `efforts`. None lists `none` or `minimal`. Accepting those two would tell
- * the caller one effort while Codex ran another, so they are refused by name
- * instead. */
+/* Each provider launcher accepts a narrower effort set. A tier row's `effort`
+ * is its default, not its allowed set. The receipt reports the effort that
+ * will run after any provider mapping. The adapter applies that same mapping
+ * at launch; tests/agent-spawn-tree-surface.test.js checks they agree. */
 const CODEX_SPAWN_EFFORTS = Object.freeze(['low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
 const AGENT_SPAWN_EFFORT_BY_PROVIDER = Object.freeze({
   codex: Object.freeze({ accepts: CODEX_SPAWN_EFFORTS, applies: Object.freeze({}) }),
@@ -204,9 +177,7 @@ const AGENT_SPAWN_EFFORT_BY_PROVIDER = Object.freeze({
 /* WHAT THE TIER ALREADY DECIDED, AND WHAT IS LEFT FOR THE CALLER TO SAY.
  *
  * Every tier value this tool accepts (src/lib/fleet-worker-tiers.json) already
- * names BOTH a provider and a model -- `astra`
- * is codex/gpt-6-astra, `claude-opus` is claude/claude/opus, `claude-opus-5`
- * is claude/claude-opus-5. There is therefore no tier
+ * names both a provider and a model. There is therefore no tier
  * for which `provider` or `model` SELECTS anything. They can only agree with
  * the tier, or contradict it.
  *
@@ -214,8 +185,8 @@ const AGENT_SPAWN_EFFORT_BY_PROVIDER = Object.freeze({
  * applied and echoed back, which lets a caller state what it believes it is
  * starting and be told it was right; a contradiction is refused by name with
  * the tier's own values in the sentence. The alternative -- accepting
- * `provider: codex` on a `claude-opus` tier and starting Opus anyway -- spends
- * the person's money on a model nobody asked for and says nothing.
+ * a mismatched provider while starting the tier's model -- spends the person's
+ * money on a model nobody asked for and says nothing.
  *
  * EFFORT IS THE ONE THAT IS GENUINELY THE CALLER'S, and it is per provider
  * (AGENT_SPAWN_EFFORT_BY_PROVIDER above). An effort a provider does not offer
@@ -686,7 +657,13 @@ const taskReadStatus = choice(
   [...taskStatus.enum, 'expired'],
   'Reported task status: an expired leased claim reports expired, and an expired running lease reports uncertain.'
 );
-const ledgerActor = choice(['claude', 'codex'], 'The agent program you are, claude or codex. It must match the program this Fleet server was started for.');
+function boundLedgerArgs(args, context = {}) {
+  if (!require('./openshell-worker-providers').isProviderId(context.agentActor)) {
+    throw Object.assign(new Error('This ledger mutation requires a transport-bound provider id.'),
+      { code: 'LEDGER_ACTOR_UNBOUND' });
+  }
+  return { ...args, actor: context.agentActor };
+}
 // These broker controls resolve the durable state store in their constructors,
 // and getStateStore() now eagerly opens and schema-validates on first open
 // Instantiating them at module load would therefore perform database
@@ -798,7 +775,7 @@ function define(name, description, inputSchema, handler, options = {}) {
     throw new TypeError(`${P14_SCOPED_APPROVAL_TOKEN_FIELD} is reserved for the internal scoped approval transport.`);
   }
   const readOnlyHint = options.readOnlyHint === undefined ? effect.endsWith('-read') : options.readOnlyHint;
-  // MCP clients read the title from annotations (Claude Code) or from the tool
+  // MCP clients read the title from annotations or from the tool
   // itself (the 2025-06-18 schema); both carry the same words.
   const annotations = Object.freeze({
     title,
@@ -834,6 +811,13 @@ function define(name, description, inputSchema, handler, options = {}) {
 
 // Fleet's tool definitions. The host surface (host-surface.js) narrows this
 // same set by permission level and by whether subagents are enabled.
+// The tier names grouped by provider, in the catalog's one provider order.
+function workerTierGroups() {
+  const groups = new Map();
+  for (const [name, row] of Object.entries(require('./fleet-worker-tiers'))) groups.set(row.provider, [...(groups.get(row.provider) || []), name]);
+  return [...groups].map(([provider, names]) => `${provider} (${names.join(', ')})`).join('; ');
+}
+
 const CORE_TOOLS = [
   define('system.status', 'Show Fleet\'s version, the project folder it serves, whether subagents are on, and the health of its state database and audit log. Changes nothing.', schema(), () => system.status(), { effect: 'local-read' }),
   define('settings.read', 'Read Fleet\'s settings for this project: each value, where it came from, and any value Fleet rejected. Pass ids to read only those settings. Changes nothing; the person changes settings with /tefleet settings.', schema({
@@ -869,7 +853,6 @@ const CORE_TOOLS = [
   // src/lib/minor-ledger-agent-gate.js. The actor is transport-bound
   // (src/mcp-server.js R_LEDGER_ACTOR_BOUND_TOOLS).
   define('t_ledger.file', 'Add a task to Fleet\'s ledger, where the person sees it with /tefleet ledger. It is open at once, or recurring if you give a recurrence. Record progress with t_ledger.progress and finish it with t_ledger.complete; only the person removes a task, with /tefleet ledger remove.', schema({
-    actor: ledgerActor,
     scope: choice(['global', 'session', 'tree', 'thread'], 'Who the record is for: global (every agent in the project), or a narrower label, session, tree or thread, with a key you choose. The label only groups records; ledger.read can filter on it.'),
     key: { type: 'string', minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$', description: 'Your key for a session, tree or thread scope, such as a short name for the work. Omit for global.' },
     words: { type: 'string', minLength: 1, maxLength: 16384, description: 'What the task is.' },
@@ -881,11 +864,10 @@ const CORE_TOOLS = [
       required: ['interval']
     },
     why: { type: 'string', maxLength: 300, description: 'One line: why this task exists.' }
-  }, ['actor', 'scope', 'words']), args => minorLedgerAgentControl.file(args), {
+  }, ['scope', 'words']), (args, context) => minorLedgerAgentControl.file(boundLedgerArgs(args, context)), {
     effect: 'local-write', destructiveHint: false, idempotentHint: false, openWorldHint: false
   }),
   define('t_ledger.progress', 'Record progress or a blocker on an unfinished one-shot ledger task: in-progress while working, blocked-external when the person or someone outside must act, or open again once a blocker clears. A finished task stays finished, and repeating the same update does not count as new progress.', schema({
-    actor: ledgerActor,
     id: { type: 'string', minLength: 2, maxLength: 12, pattern: '^T[1-9]\\d{0,9}$', description: 'The task id, such as T12.' },
     status: choice(['open', 'in-progress', 'blocked-external'], 'The observed task condition.'),
     reason: { type: 'string', minLength: 1, maxLength: 300, description: 'Concrete new progress, evidence or the unresolved blocker.' },
@@ -894,22 +876,20 @@ const CORE_TOOLS = [
       description: 'Optional ids of tasks that must be done first. Omit to keep the current list; pass [] to clear it.',
       items: { type: 'string', minLength: 2, maxLength: 12, pattern: '^T[1-9]\\d{0,9}$' }
     }
-  }, ['actor', 'id', 'status', 'reason']), args => minorLedgerAgentControl.progress(args), {
+  }, ['id', 'status', 'reason']), (args, context) => minorLedgerAgentControl.progress(boundLedgerArgs(args, context)), {
     effect: 'local-write', destructiveHint: false, idempotentHint: true, openWorldHint: false
   }),
   define('t_ledger.complete', 'Mark one ledger task done. A one-shot task becomes "done", once. A recurring task stays "recurring" and logs this completion.', schema({
-    actor: ledgerActor,
     id: { type: 'string', minLength: 2, maxLength: 12, pattern: '^T[1-9]\\d{0,9}$', description: 'The task id returned by t_ledger.file, e.g. "T12".' }
-  }, ['actor', 'id']), args => minorLedgerAgentControl.complete(args), {
+  }, ['id']), (args, context) => minorLedgerAgentControl.complete(boundLedgerArgs(args, context)), {
     effect: 'local-write', destructiveHint: false, idempotentHint: true, openWorldHint: false
   }),
   define('a_ledger.file', 'Leave a question for the person in Fleet\'s ledger. They see it with /tefleet ledger and answer it with /tefleet ledger answer whenever they get to it. Nothing waits for the answer and no reply comes back in this turn: read it later with ledger.read, or ask the person in chat if you need the answer now.', schema({
-    actor: ledgerActor,
     scope: choice(['global', 'session', 'tree', 'thread'], 'Who the record is for: global (every agent in the project), or a narrower label, session, tree or thread, with a key you choose. The label only groups records; ledger.read can filter on it.'),
     key: { type: 'string', minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$', description: 'Your key for a session, tree or thread scope, such as a short name for the work. Omit for global.' },
     words: { type: 'string', minLength: 1, maxLength: 16384, description: 'The question, in full.' },
     why: { type: 'string', maxLength: 300, description: 'One line: why you are asking.' }
-  }, ['actor', 'scope', 'words']), args => minorLedgerAgentControl.fileAsk(args), {
+  }, ['scope', 'words']), (args, context) => minorLedgerAgentControl.fileAsk(boundLedgerArgs(args, context)), {
     effect: 'local-write', destructiveHint: false, idempotentHint: false, openWorldHint: false
   }),
   define('host.read_file', 'Read one UTF-8 text file in the project folder Fleet is set up for (up to 2 MiB), or a byte range of it that starts and ends on character boundaries. Fleet records what this session read: host.write_file and host.patch_file change only files whose current content this session has read. Credential files are refused by name (for example anything under .ssh, .aws or .gnupg, a folder named vault, .netrc, .npmrc and credential-shaped file names); keep other secrets outside the project.', schema({
@@ -919,7 +899,7 @@ const CORE_TOOLS = [
   }, ['path']), (args, context) => hostControl().readFile(args, hostFileToolOptions(context)), {
     effect: 'local-read', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false
   }),
-  define('host.write_file', 'Create or replace one whole UTF-8 text file in the project folder (up to 2 MiB). Replacing an existing file needs this session to have read its current content: otherwise it refuses with HOST_FILE_READ_REQUIRED, or with HOST_FILE_STALE if the file changed since (another agent, a shell command, a native tool or another program); re-read it, reconcile and retry. A new file is created atomically and never replaces one another writer created first. Prefer host.patch_file for edits. Credential files and protected paths (such as Git hooks, .claude settings and .mcp.json) are refused.', schema({
+  define('host.write_file', 'Create or replace one whole UTF-8 text file in the project folder (up to 2 MiB). Replacing an existing file needs this session to have read its current content: otherwise it refuses with HOST_FILE_READ_REQUIRED, or with HOST_FILE_STALE if the file changed since (another agent, a shell command, a native tool or another program); re-read it, reconcile and retry. A new file is created atomically and never replaces one another writer created first. Prefer host.patch_file for edits. Credential files and protected paths (such as Git hooks, agent settings folders and .mcp.json) are refused.', schema({
     path: str('Absolute path inside the project folder, or a path relative to it.'),
     content: str('The complete new UTF-8 file content.')
   }, ['path', 'content']), (args, context) => hostControl().writeFile(args, hostFileToolOptions(context)), {
@@ -997,7 +977,7 @@ const CORE_TOOLS = [
     });
   }, { effect: 'local-read' }),
 
-  define('agent_comms.send_local', 'Send a message to your manager or to one of your own subagents. Address it by name (such as Subagent 2, or Claude Code for the lead), by nodeId, or as manager; anyone else is not reachable, and the reply lists who is. A busy subagent gets the message when its turn ends, and a stopped one when it is resumed or restarted. The lead collects messages with agent.wait.', schema({
+  define('agent_comms.send_local', 'Send a message to your manager or to one of your own subagents. Address it by name (such as Subagent 2 or Lead), by nodeId, or as manager; anyone else is not reachable, and the reply lists who is. A busy subagent gets the message when its turn ends, and a stopped one when it is resumed or restarted. The lead collects messages with agent.wait.', schema({
     from: { type: 'string', minLength: 1, maxLength: 120, description: 'Your own name on the tree. Fleet takes the sender from this session, so this is for reference only.' },
     to: { type: 'string', minLength: 1, maxLength: 120, description: 'The recipient: a name or nodeId from agent_comms.local_roster, or manager.' },
     body: { type: 'string', minLength: 1, maxLength: 4000, description: 'What to say. Credentials, secret material and hidden reasoning are refused.' }
@@ -1012,12 +992,12 @@ const CORE_TOOLS = [
     from: { type: 'string', minLength: 1, maxLength: 120, description: 'Your own name on the tree. Fleet identifies you from this session; a different name only adds a note to the reply.' }
   }, ['from']), (args, context) => agentCommsLocal().roster(args, context), { effect: 'local-read' }),
 
-  define('agent.spawn', 'Start a subagent: a separate Claude Code or Codex CLI session that works in this project folder and reports back to you. Describe the work in the contract form below; for a request from the person, quote it (or the number of subagents they asked for) in the because line. The reply comes once the subagent\'s first turn is submitted; collect its report with agent.wait. The person\'s width and depth settings limit how many subagents may run below each agent and how deep they may nest, and a refused spawn names the limit. A malformed contract is refused before anything starts. Subagents stop when the person\'s Claude Code session ends; agent.resume continues them later.', schema({
+  define('agent.spawn', 'Start a subagent: a separate agent CLI session that works in this project folder and reports back to you. Describe the work in the contract form below; for a request from the person, quote it (or the number of subagents they asked for) in the because line. The reply comes once the subagent\'s first turn is submitted; collect its report with agent.wait. The person\'s width and depth settings limit how many subagents may run below each agent and how deep they may nest, and a refused spawn names the limit. A malformed contract is refused before anything starts. Subagents stop when the person\'s lead session ends; agent.resume continues them later.', schema({
     contract: { type: 'string', minLength: 1, maxLength: 12000, description: require('../../tools/agent-contract').CONTRACT_GUIDE },
-    tier: choice(['astra', 'luna', 'terra', 'sol', 'claude-fable', 'claude-sonnet', 'claude-opus', 'claude-opus-5-5', 'claude-opus-5', 'claude-sonnet-5', 'claude-fable-5-1', 'claude-fable-5', 'claude-haiku-4-5', 'claude-opus-4-8', 'claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-4-6'], 'Which model the subagent runs, by tier name. Each tier belongs to one agent CLI: the claude-* tiers to the Claude Code CLI, the others to the Codex CLI. claude-fable, claude-sonnet and claude-opus run whichever model the installed Claude Code CLI serves under that name; every other tier pins one model. Use one of the listed values exactly; the CLI must still be installed and signed in when the subagent starts.'),
+    tier: choice(Object.keys(require('./fleet-worker-tiers')), 'Which model the subagent runs, by tier name. Tiers are grouped by provider: ' + workerTierGroups() + '. Among the claude-* tiers, the unnumbered fable, sonnet and opus tiers follow the installed CLI\'s current model, and numbered tiers pin a model. Use one of the listed values exactly; its CLI must be installed and signed in when the subagent starts.'),
     turns: integer('Not used: a subagent has no turn limit. If given, it is ignored and named in the reply\'s notApplied.', { minimum: 1, maximum: 100000 }),
     timeoutSeconds: integer('Not used: a subagent has no time limit. If given, it is ignored and named in the reply\'s notApplied.', { minimum: 60, maximum: 86400 }),
-    effort: choice(AGENT_SPAWN_EFFORT_VALUES, 'How hard the subagent thinks: low, medium, high, xhigh, max or ultra. A level the model does not offer is refused by name: luna has no ultra, claude-opus-4-6 and claude-sonnet-4-6 have no xhigh, and claude-haiku-4-5 takes none. On Claude tiers ultra runs as max. Omit it for the tier\'s default; the reply\'s applied.effort shows what runs.'),
+    effort: choice(AGENT_SPAWN_EFFORT_VALUES, 'How hard the subagent thinks: low, medium, high, xhigh, max or ultra. A level the model does not offer is refused by name: claude-haiku-4-5 takes none, claude-opus-4-6 and claude-sonnet-4-6 have no xhigh, and luna has no ultra. Some models run ultra at their highest available level. Omit it for the tier\'s default; the reply\'s applied.effort shows what runs.'),
     provider: { type: 'string', minLength: 1, maxLength: 32, description: 'Optional check: the tier already fixes the agent CLI, so this is accepted when it matches the tier and refused when it does not. The reply\'s applied.provider shows it.' },
     model: { type: 'string', minLength: 1, maxLength: 128, description: 'Optional check: the tier already fixes the model, so this is accepted when it names the tier\'s model and refused when it does not. The reply\'s applied.model shows it.' },
     workspaceRoot: { type: 'string', minLength: 1, maxLength: 4096, description: 'Optional. It must be the project folder Fleet is set up for, which is also the default.' },
@@ -1025,7 +1005,7 @@ const CORE_TOOLS = [
     treeRole: { type: 'string', minLength: 1, maxLength: 64, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$', description: 'The subagent\'s role on the tree, such as manager or worker. By default it follows the contract role: IMPLEMENTER, INVESTIGATOR, TESTER, VERIFIER, HARVESTER and WORKER become worker, PLANNER becomes planner, and MANAGER and COORDINATOR become manager. An unknown role is refused.' },
     parentLaunchId: { type: 'string', minLength: 23, maxLength: 71, pattern: '^launch_[A-Za-z0-9_-]{16,64}$', description: 'Not used: Fleet records each subagent\'s parent itself. If given, it is ignored and named in the reply\'s notApplied.' }
   }, ['contract', 'tier']), (args, context) => spawnSubagent(args, context), {
-    // It starts a claude or codex CLI, which reaches its provider.
+    // It starts the tier's CLI, which reaches its provider.
     effect: 'local-write', destructiveHint: false, idempotentHint: false, approvalEligible: false, openWorldHint: true
   }),
   define('agent.wait', 'Wait up to timeoutSeconds for reports and messages from your subagents (lead session only). It returns at once when something is waiting or no subagent is working. Each report is delivered once, up to 16 at a time, with moreReports counting the rest; activeTurns counts subagents still working. After agent.spawn, call this before telling the person a subagent is still running. After three timeouts, tell the person which subagents are still running and stop waiting. It never starts a model turn or a subagent.', schema({
@@ -1710,7 +1690,7 @@ function ownerIdentityRequestActor(context = {}) {
   // `agentActor` is authenticated only when Fleet itself bound the session.
   // Never turn an arbitrary caller-supplied string into an authoritative audit
   // identity.
-  return ['codex', 'claude'].includes(context.agentActor)
+  return require('./openshell-worker-providers').isProviderId(context.agentActor)
     ? context.agentActor
     : 'unattributed';
 }
@@ -2205,6 +2185,7 @@ async function executeToolWithinPolicy(name, args = {}, context = {}) {
     // drives executeTool rather than the provider.
     const contextAwareHandler = [
       'host.read_file', 'host.write_file', 'host.patch_file', 'host.list_dir',
+      't_ledger.file', 't_ledger.progress', 't_ledger.complete', 'a_ledger.file',
       'capability.find', 'agent_comms.send_local', 'agent_comms.local_roster',
       'agent.spawn', 'agent.wait', 'agent.set_model', 'agent.set_effort', 'agent.set_provider',
       'agent.set_role', 'agent.stop', 'agent.resume', 'agent.restart', 'agent.remove'
@@ -2414,6 +2395,7 @@ const exportedRegistry = {
   findOutwardFileFields, assertEgressPreflight, resolveActiveRequestId, assertOutwardGate,
   AgentContractRefusal, validatedAgentContract, spawnSubagent,
   resolveTreeModelChoice,
+  boundLedgerArgs,
   WorkspaceRootsUnavailableError, confinedWorkspaceRoots,
   assertActionGuardsFor,
   requireOwnerIdentityReadAudit, ownerIdentityRequestActor,

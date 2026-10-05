@@ -5,7 +5,7 @@ const AGENT_API_MODES = Object.freeze(['Only', 'Optimized', 'Enabled', 'Disabled
 const TOOL_MODE_SETTING_ID = 'agent.tool_mode';
 const TOOL_MODES = Object.freeze({
   Only: 'ToolsEnabled only',
-  Optimized: 'ToolsEnabled and selected native tools',
+  Optimized: 'ToolsEnabled only (earlier Optimized choice)',
   Enabled: 'ToolsEnabled and native tools',
   Disabled: 'Native tools only'
 });
@@ -19,6 +19,7 @@ function normalizeAgentApiMode(value) {
 }
 
 function agentApiModeFromToolMode(value) {
+  if (value === 'ToolsEnabled and selected native tools') return 'Optimized';
   return AGENT_API_MODES.find(mode => TOOL_MODES[mode] === value) || null;
 }
 
@@ -27,7 +28,7 @@ function agentApiModeFromToolMode(value) {
 function normalizeSettingChange(id, value) {
   if (id !== AGENT_API_SETTING_ID && id !== TOOL_MODE_SETTING_ID) return { id, value };
   const mode = id === TOOL_MODE_SETTING_ID ? agentApiModeFromToolMode(value) : normalizeAgentApiMode(value);
-  if (!mode) throw Object.assign(new Error('Choose Only, Optimized, Enabled, or Disabled for the available tool sets.'), { code: 'AGENT_API_MODE_INVALID' });
+  if (!mode) throw Object.assign(new Error('Choose Only, Optimized, Enabled, or Disabled for the saved Agent API mode.'), { code: 'AGENT_API_MODE_INVALID' });
   return { id: AGENT_API_SETTING_ID, value: mode };
 }
 

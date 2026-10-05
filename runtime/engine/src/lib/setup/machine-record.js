@@ -27,6 +27,7 @@ const path = require('node:path');
 // caller merely validating a record does not pull the tool registry in here.
 const permissionTierPolicy = require('../permission-tier-policy');
 const { resolveServicesRoot } = require('../durable-memory-file');
+const { PROVIDER_ORDER, isProviderId } = require('../openshell-worker-providers');
 
 const SCHEMA_VERSION = 1;
 
@@ -54,7 +55,7 @@ const BRIDGE_PORT_RANGE = Object.freeze({ first: 4610, last: 4619 });
 const LOOPBACK_HOST = '127.0.0.1';
 
 const MACHINE_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
-const OPENSHELL_REGISTRATION_PROVIDERS = Object.freeze(['codex', 'claude']);
+const OPENSHELL_REGISTRATION_PROVIDERS = PROVIDER_ORDER;
 const OPENSHELL_REGISTRATION_STATES = Object.freeze(['never', 'configured', 'unknown']);
 
 class SetupRefusal extends Error {
@@ -857,17 +858,9 @@ function runtimeNeedsNodeMode(nodePath) {
   return leaf !== 'node';
 }
 
-/* The names this generator may write as a calling principal.
- *
- * Frozen beside the generator rather than imported, because this list is what
- * this file is allowed to WRITE; the server's own list is what it is willing to
- * READ, and a generator that could write an unsupported name would be one that
- * produces documents whose actor-bound tools refuse at runtime -- in a
- * grandchild process nobody is watching.
- *
- * This list must remain a SUBSET of the actors the server accepts
- * (AGENT_ACTOR_VALUES in src/mcp-server.js). */
-const AGENT_ACTORS = Object.freeze(['codex', 'claude']);
+// Presentation order for installed workers; other valid provider ids remain
+// legal transport actors when they are supplied explicitly.
+const AGENT_ACTORS = PROVIDER_ORDER;
 const DECLARED_AGENT_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const AGENT_SESSION_CREDENTIAL = /^[A-Za-z0-9_-]{43}$/;
 
@@ -922,11 +915,11 @@ function generateMcpConfig(record, {
    * produce a server whose actor-bound tools refuse at runtime with a message
    * nobody is watching for -- the exact failure shape this whole file is written
    * against. `null` alone means "not an agent session". */
-  if (agentActor !== null && !AGENT_ACTORS.includes(agentActor)) {
+  if (agentActor !== null && !isProviderId(agentActor)) {
     throw new SetupRefusal(
       'SETUP_AGENT_ACTOR_INVALID',
       `"${typeof agentActor === 'string' ? agentActor : typeof agentActor}" is not an assistant this installation can name as the caller, so no configuration can be generated for it.`,
-      { agentActor: typeof agentActor === 'string' ? agentActor.slice(0, 60) : typeof agentActor, accepted: AGENT_ACTORS }
+      { agentActor: typeof agentActor === 'string' ? agentActor.slice(0, 60) : typeof agentActor }
     );
   }
   /* Provider and declared identity are different facts. `agentActor` says
@@ -1000,7 +993,6 @@ function generateMcpConfig(record, {
   const selectedApiMode = agentApiMode === undefined
     ? require('../agent-api-policy').agentApiMode() : modePolicy.normalizeAgentApiMode(agentApiMode);
   if (!selectedApiMode) throw new SetupRefusal('AGENT_API_MODE_UNAVAILABLE', 'The captured agent tool mode is invalid.', {});
-  const nativeToolsOnly = selectedApiMode === 'Disabled';
   // Probed ONCE for the whole document: three servers, one runtime, one answer.
   const guardFlags = runtimeGuardFlags(record.nodePath, { spawn: runtimeProbe });
   // The whole catalogue, not only the entries this level includes: an entry
@@ -1008,10 +1000,6 @@ function generateMcpConfig(record, {
   // that out only at the level that happens to use it is finding out late.
   assertServerCatalogue(SERVER_CATALOGUE);
   for (const server of SERVER_CATALOGUE) {
-    if (nativeToolsOnly) {
-      skipped.push({ name: server.name, reason: 'Fleet tools are disabled by the user setting for assistant tool mode' });
-      continue;
-    }
     if (!server.tiers.includes(record.tier)) {
       skipped.push({ name: server.name, reason: `not part of the ${record.tier} tier` });
       continue;
@@ -1045,7 +1033,7 @@ function generateMcpConfig(record, {
      * there is no install shape where the servers this document starts are
      * unbounded. See the note above SERVER_CATALOGUE for the measurement. */
     entry.env = { ...(entry.env || {}), ...heapCapEnvironment(server.heapCapMB),
-      TOOLSENABLED_AGENT_TOOL_MODE: modePolicy.TOOL_MODES[selectedApiMode] };
+      TOOLSENABLED_AGENT_TOOL_MODE: modePolicy.TOOL_MODES.Only };
     // The level narrows every allowlisted server, INCLUDING the read-only one.
     // Guided generates that server and nothing else, so leaving it at the
     // generic read-only profile left Guided carrying `host.read_file` and

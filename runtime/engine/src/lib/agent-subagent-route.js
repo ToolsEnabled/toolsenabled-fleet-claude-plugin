@@ -1,43 +1,10 @@
 'use strict';
-// WHERE AN ASSISTANT'S OWN ASSISTANTS APPEAR: on the person's tree, or off it.
-//
-// The product design:
-//
-//   When an agent spawns subagents it can spawn its own subagents as usual if
-//   it has full permissions, spawn them through the ToolsEnabled API as
-//   non-tree agents, or launch them through the API as full, user-toggled
-//   agents -- and user settings decide which.
-//
-//   These are separate settings. The API setting is one toggle that governs a
-//   whole class of the software; the SUBAGENT settings cover the specifics.
-//
-// So there are three ROUTES and two SEPARATE settings, and the separation is
-// the whole point of this file existing next to agent-api-policy.js rather than
-// inside it.
-//
-// ---------------------------------------------------------------------------
-// WHAT THIS FILE DOES NOT DECIDE, AND THE MISTAKE THAT IS EASY TO MAKE HERE.
-//
-// `agent.agent_api` decides WHICH DOORS EXIST: in the Only and Optimized modes
-// the CLI's own `Task` built-in is removed from the assistant
-// (agent-api-policy.js agentApiArgs), so the only way to start another assistant
-// is this product's tool. In the other modes `Task` is present AS WELL.
-//
-// It does NOT gate `agent.spawn`. That tool is registered either way, and an
-// assistant may call it either way. So this file must never read the API
-// setting to decide whether a spawn may happen -- the classic route is simply
-// "the assistant called its own tool instead of ours", which is a fact about
-// which tool ran, not a branch anyone takes inside this one. An earlier draft of
-// this module returned a `classic` route from here; that was wrong, and it would
-// have made `agent.spawn` refuse itself whenever the person allowed built-ins.
-//
-// WHAT THIS FILE DECIDES is the one question that is genuinely ours: when a
+// This module decides one question: when a
 // spawn does come through this product's tool, does the new assistant become a
 // CIRCLE ON THE PERSON'S TREE -- its own name, its own conversation, the same
 // stop button as one they started by hand -- or a LANE off it, bounded and
 // recorded but never drawn.
 //
-// ---------------------------------------------------------------------------
 // WHY "LET THE ASSISTANT DECIDE" IS THE SHIPPED ANSWER, AND WHAT IT DECIDES BY.
 //
 // The person is already choosing per request, in the request itself (for

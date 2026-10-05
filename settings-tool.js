@@ -1,6 +1,7 @@
 'use strict';
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { childEnvironment } = require('./runtime-config');
 
 // Fleet's settings are the person's. Claude may show them; only the person
 // changes them, by typing /tefleet settings, which the prompt hook applies
@@ -14,25 +15,11 @@ const settingsTool = Object.freeze({
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 });
 
-// The tools each Agent API mode gives a subagent of each agent CLI at the
-// Standard level, the only level the plugin runs. Claude subagents always get
-// Read, Edit and Write in the project and no shell; the mode decides only
-// whether Fleet's tools come with them. Codex has no way to apply Optimized.
-const MODE_TOOLS = Object.freeze({
-  Only: Object.freeze({
-    claude: 'Read, Edit and Write in the project, plus Fleet\'s coordination tools',
-    codex: 'Fleet\'s tools only: it changes files through Fleet\'s file tools, which refuse the protected paths; Codex\'s own file editing, shell and other built-in tools are off' }),
-  Optimized: Object.freeze({
-    claude: 'the same as Only: Read, Edit and Write in the project, plus Fleet\'s coordination tools',
-    codex: 'none, because Codex subagents do not start in this mode' }),
-  Enabled: Object.freeze({
-    claude: 'the same as Only: Read, Edit and Write in the project, plus Fleet\'s coordination tools',
-    codex: 'Fleet\'s tools and Codex\'s own tools, including its shell, which runs in Codex\'s sandbox with network access off' }),
-  Disabled: Object.freeze({
-    claude: 'Read, Edit and Write in the project, without Fleet\'s tools',
-    codex: 'Codex\'s own tools, including its shell in Codex\'s sandbox, without Fleet\'s tools' }),
-});
-const CLI_NAMES = Object.freeze({ claude: 'Claude Code', codex: 'Codex' });
+// At the Standard level, the only level the plugin runs, every Agent API mode
+// gives every subagent the same tools: read and change access to the project,
+// each CLI by its own mechanism (see the README), plus Fleet's coordination
+// tools, and no shell. The mode is kept so a choice saved earlier still applies.
+const MODE_TOOLS = 'Read and change access to the project, plus Fleet\'s coordination tools, and no shell';
 
 function text(value, isError = false) {
   return { ...(isError ? { isError: true } : {}), content: [{ type: 'text', text: value }] };
@@ -43,14 +30,12 @@ function describeSettings(view) {
   const available = Object.entries(view.modelsAvailable || {}).map(([provider, names]) => `${provider}: ${names.join(', ')}`).join('; ');
   const models = view.models === 'all' ? `all${available ? ` (${available})` : ''}`
     : `${view.models.join(', ')} (other providers keep all their models)`;
-  const tools = MODE_TOOLS[view.apiMode] || {};
-  const used = view.subagents ? (view.providers || []).filter(name => Object.hasOwn(tools, name)) : [];
   return [`Fleet settings for ${view.workspace}:`,
     `- Subagents: ${view.subagents ? `on, using ${view.providers.join(', ')}` : 'off'}`,
     `- Depth: ${view.depth} level${view.depth === 1 ? '' : 's'} of subagents below this session`,
     `- Width: up to ${view.width} subagent${view.width === 1 ? '' : 's'} running at once under each agent`,
     `- Agent API mode: ${view.apiMode}${view.apiMode === 'Only' ? ' (the default)' : ''}`,
-    ...used.map(name => `  - ${CLI_NAMES[name] || name} subagents get ${tools[name]}.`),
+    `  - Every subagent gets: ${MODE_TOOLS}.`,
     `- Models: ${models}`,
     `- Audit: ${view.audit ? 'on' : 'off'}`,
     ...(view.notes || [])];
@@ -64,7 +49,7 @@ function runSettings(args = {}, { run = spawnSync, env = process.env } = {}) {
     return text('Fleet\'s settings were not changed. Only the person changes them: ask them to type /tefleet settings followed by the change, for example /tefleet settings depth 2. Fleet applies it without going through you.', true);
   }
   const result = run(process.execPath, [path.join(__dirname, 'settings-entry.js'), '--show'],
-    { env, encoding: 'utf8', timeout: 90000, maxBuffer: 1024 * 1024 });
+    { env: childEnvironment(env), encoding: 'utf8', timeout: 90000, maxBuffer: 1024 * 1024 });
   if (result.status !== 0) {
     const detail = String(result.stderr || result.error?.message || 'Settings failed.')
       .replace(/^Fleet settings failed:\s*/, '').replace(/^[A-Z][A-Z0-9_]+:\s*/, '').trim();

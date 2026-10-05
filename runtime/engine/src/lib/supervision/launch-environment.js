@@ -26,14 +26,14 @@ const envScrub = require('../env-scrub.js');
 
 const SUBSCRIPTION_PROVIDER_IDS = Object.freeze(['codex', 'claude', 'gemini', 'grok']);
 
-// Provider sign-in and endpoint variables that Fleet's own helper processes
-// never need. Agent CLIs keep all of them (agentCliEnvironment below);
-// credentialFreeEnvironment() removes them from every other helper, and
-// assertNoBillingCredentials() refuses a helper launch where a variable marked
-// `tripwire: true` survived. `tripwire: false` marks selectors such as a region
-// that are removed but are not themselves a secret or endpoint. Fleet starts
-// only claude and codex; the Gemini and Grok entries stay so that keys a person
-// set for those tools never reach Fleet's helpers either.
+// Provider sign-in and endpoint variables. Fleet never carries a provider's key,
+// token or endpoint: credentialFreeEnvironment() removes them for Fleet's own
+// helper processes and agentCliEnvironment() removes them for the agent CLIs it
+// starts, which sign in by their own saved login. assertNoBillingCredentials()
+// refuses a helper launch where a variable marked `tripwire: true` survived.
+// `tripwire: false` marks selectors such as a region that are removed but are
+// not themselves a secret or endpoint. The Gemini and Grok entries stay so that
+// keys a person set for those tools never reach Fleet's processes either.
 const ENVIRONMENT_RULES = Object.freeze([
   ['ANTHROPIC_API_KEY', 'claude', true],
   ['ANTHROPIC_AUTH_TOKEN', 'claude', true],
@@ -98,8 +98,8 @@ function invalidEnvironment(baseEnvironment) {
 // account ids, host-only tools, the parent's IDE connection and the person's
 // terminal multiplexer and agent sockets. A subagent is its own CLI session on
 // its own sign-in, so none of them are passed on. Sign-in locations such as
-// CLAUDE_CONFIG_DIR and CODEX_HOME, and the CLIs' own sign-in variables, are
-// kept.
+// CLAUDE_CONFIG_DIR and CODEX_HOME are kept, so each CLI finds its own saved
+// login; provider sign-in variables are removed (agentCliEnvironment below).
 const LEAD_SESSION_ENV = Object.freeze(new Set([
   'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CODE_HOST_SESSION_ID',
   'CLAUDE_CODE_REMOTE_SESSION_ID', 'CLAUDE_CODE_BRIDGE_SESSION_ID', 'CLAUDE_CODE_CLOUD_SESSION_ID',
@@ -127,11 +127,18 @@ function leadSessionBinding(name) {
   return LEAD_SESSION_ENV.has(upper) || LEAD_SESSION_PREFIXES.some(prefix => upper.startsWith(prefix));
 }
 
+// A name that says it holds a provider's key or token, whoever the provider is,
+// so a CLI Fleet has no list for never receives one either. Names such as
+// GITHUB_TOKEN, which are not a provider sign-in, are not matched.
+const CREDENTIAL_LIKE_NAME = /(?:^|_)(?:API_?KEY|AUTH_?TOKEN|ACCESS_?TOKEN|OAUTH_?TOKEN|BEARER_?TOKEN|SESSION_?TOKEN|SECRET_?(?:ACCESS_?)?KEY|CREDENTIALS?)(?:_|$)/i;
+
 /* The environment an agent CLI gets: the person's own, without the lead
-   session's bindings. A new object; the caller's is never changed. */
+   session's bindings and without any provider sign-in variable, so Fleet never
+   carries a key, token or endpoint and each CLI signs in by its own saved login.
+   A new object; the caller's is never changed. */
 function agentCliEnvironment(baseEnvironment = process.env) {
   invalidEnvironment(baseEnvironment);
-  const environment = { ...baseEnvironment };
+  const environment = withoutCredentialLikeNames(credentialFreeEnvironment(baseEnvironment));
   envScrub.deleteEnvMatching(environment, leadSessionBinding);
   return environment;
 }
@@ -140,7 +147,7 @@ function agentCliEnvironment(baseEnvironment = process.env) {
    sign-in check calls. */
 const subscriptionLaunchEnvironment = agentCliEnvironment;
 
-/* A helper process that is not an agent CLI gets no provider credential. */
+/* The names listed for each provider, removed whole and without regard to case. */
 function credentialFreeEnvironment(baseEnvironment = process.env) {
   invalidEnvironment(baseEnvironment);
   // Each spread leaves the caller's environment unchanged; envScrub matches
@@ -151,6 +158,12 @@ function credentialFreeEnvironment(baseEnvironment = process.env) {
       { ...environment }, PROVIDER_ENVIRONMENT_NAMES[providerId]
     );
   }
+  return environment;
+}
+
+/* Also without any name that says it holds a key or token. */
+function withoutCredentialLikeNames(environment) {
+  envScrub.deleteEnvMatching(environment, name => CREDENTIAL_LIKE_NAME.test(String(name)));
   return environment;
 }
 
@@ -174,7 +187,7 @@ function assertNoBillingCredentials(environment, { context = '' } = {}) {
 }
 
 function safeLaunchEnvironment(baseEnvironment = process.env, { context = '' } = {}) {
-  return assertNoBillingCredentials(credentialFreeEnvironment(baseEnvironment), { context });
+  return assertNoBillingCredentials(withoutCredentialLikeNames(credentialFreeEnvironment(baseEnvironment)), { context });
 }
 
 /* WHERE AN AGENT CLI IS, found the way the person's terminal finds it -- the
@@ -263,120 +276,6 @@ function confinedAgentCliEnvironment(baseEnvironment = process.env, { workspace 
   return environment;
 }
 
-/* THE PERSON'S OWN CLAUDE SIGN-IN SETTINGS, FOR A CLAUDE SUBAGENT.
- *
- * Fleet starts a Claude subagent without the person's settings files, so a
- * project's or a user's configuration cannot widen what it may do. That also
- * dropped every sign-in the person configured in their user settings file: an
- * apiKeyHelper, a cloud provider's credential commands, or Bedrock, Vertex or
- * Foundry switches in the file's env block. Measured with `claude auth status`
- * (Claude Code 2.1.289): signed in with the settings file, signed out with
- * --setting-sources '' or --restricted, signed in again once the same keys are
- * passed inline through --settings.
- *
- * So the subagent gets back those keys and nothing else of that file:
- *   - only the USER settings file (CLAUDE_CONFIG_DIR, else ~/.claude), never a
- *     project or local file, which a repository could supply;
- *   - only a fixed list of sign-in commands, passed inline through --settings
- *     (a command is not a secret);
- *   - only env entries whose names are provider sign-in or endpoint variables.
- *     Their values go to the child's process environment, in memory: never on
- *     a command line, never written to disk. A variable already set in the
- *     person's environment wins, as it does in their terminal.
- * A file that is not a plain file owned by this account, is writable by others,
- * lies in a folder a subagent can write, or is over 1 MiB gives nothing. */
-const AUTH_SETTING_COMMANDS = Object.freeze(['apiKeyHelper', 'awsAuthRefresh', 'awsCredentialExport', 'gcpAuthRefresh']);
-const AUTH_SETTING_ENV = Object.freeze([
-  /^CLAUDE_CODE_USE_(?:BEDROCK|VERTEX|FOUNDRY)$/,
-  /^CLAUDE_CODE_SKIP_(?:BEDROCK|VERTEX|FOUNDRY)_AUTH$/,
-  /^ANTHROPIC_(?:API_KEY|AUTH_TOKEN|BASE_URL)$/,
-  /^ANTHROPIC_(?:BEDROCK|VERTEX|FOUNDRY|AWS)_[A-Z0-9_]{1,60}$/,
-  /^ANTHROPIC_VERTEX_PROJECT_ID$/,
-  /^ANTHROPIC_(?:DEFAULT_(?:OPUS|SONNET|HAIKU|FABLE)_MODEL|SMALL_FAST_MODEL)$/,
-  /^CLAUDE_CODE_OAUTH_TOKEN$/,
-  /^AWS_[A-Z0-9_]{1,60}$/,
-  /^CLOUD_ML_REGION$/, /^VERTEX_REGION_[A-Z0-9_]{1,40}$/, /^GOOGLE_APPLICATION_CREDENTIALS$/, /^GCLOUD_PROJECT$/, /^GOOGLE_CLOUD_PROJECT$/,
-]);
-const MAX_AUTH_SETTINGS_BYTES = 1024 * 1024;
-const MAX_AUTH_VALUE = 8192;
-
-function readUserAuthSettings({ env = process.env, workspace = null, extraRoots = [] } = {}) {
-  const none = reason => Object.freeze({ settings: Object.freeze({}), env: Object.freeze({}), note: reason || null });
-  const home = (env && env.HOME) || os.homedir();
-  const folder = env && typeof env.CLAUDE_CONFIG_DIR === 'string' && env.CLAUDE_CONFIG_DIR ? env.CLAUDE_CONFIG_DIR : path.join(home, '.claude');
-  if (!path.isAbsolute(folder)) return none('Claude Code\'s configuration folder is not a full path');
-  const file = path.join(folder, 'settings.json');
-  let real;
-  let stat;
-  try { real = fs.realpathSync(file); stat = fs.statSync(real); } catch { return none(null); }
-  if (!stat.isFile()) return none('the user settings file is not a regular file');
-  /* Owned by this account, and writable by NOBODY else. An earlier release
-   * accepted a group-writable file when its gid matched this process's primary
-   * group, reasoning that a private per-user group is just a umask of 002. The
-   * gid match does not prove the group is private: macOS gives every local user
-   * `staff`, SUSE a shared `users`, and site setups routinely hand out a shared
-   * default group -- and umask 002 is deployed precisely on those systems, so the
-   * configurations where the allowance fired were the ones where its premise
-   * failed. There, mode 0664 lets another account rewrite this file, and Fleet
-   * would run the sign-in commands it names as the person and take an
-   * ANTHROPIC_BASE_URL from it. Node cannot enumerate a group's members, so there
-   * is nothing here to check against: refuse, and say how to fix it. */
-  if (typeof process.getuid === 'function' && (stat.uid !== process.getuid() || (stat.mode & 0o022) !== 0)) {
-    return none('the user settings file is not owned by this account or can be changed by others (run chmod 600 on it)');
-  }
-  if (stat.size > MAX_AUTH_SETTINGS_BYTES) return none('the user settings file is over 1 MiB');
-  const roots = subagentWritableRoots({ env, workspace, extraRoots });
-  if (insideAny(roots, real)) return none('the user settings file is in a folder a subagent can write');
-  let parsed;
-  try { parsed = JSON.parse(fs.readFileSync(real, 'utf8')); } catch { return none('the user settings file is not valid JSON'); }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return none(null);
-  const settings = {};
-  const relative = [];
-  const writable = [];
-  for (const key of AUTH_SETTING_COMMANDS) {
-    const command = parsed[key];
-    if (typeof command !== 'string' || command.length === 0 || command.length > MAX_AUTH_VALUE) continue;
-    // A command named by a relative path would run from the subagent's working
-    // folder, which the subagent can write. A full path, ~/ or a bare name found
-    // on the (filtered) PATH is the person's own program.
-    const program = command.trim().split(/\s+/)[0];
-    const named = program.startsWith('~/') ? path.join(home, program.slice(2)) : program;
-    if (program.includes('/') && !path.isAbsolute(named)) { relative.push(key); continue; }
-    /* A program Fleet is willing to name is also a program a subagent must not be
-     * able to rewrite. The agent never needs to touch settings.json for that: it
-     * only has to edit the helper the file points at, and the next launch runs it
-     * as the person. So a named command gets the same writable-root exclusion
-     * assertAgentCliPath applies to the agent CLI. A bare name needs no check
-     * here -- it is found on agentSearchPath, which already drops those roots. */
-    if (path.isAbsolute(named) && (insideAny(roots, path.resolve(named)) || insideAny(roots, realOrSelf(named)))) { writable.push(key); continue; }
-    settings[key] = command;
-  }
-  const login = parsed.forceLoginMethod;
-  if (login === 'claudeai' || login === 'console') settings.forceLoginMethod = login;
-  const variables = {};
-  const block = parsed.env;
-  if (block && typeof block === 'object' && !Array.isArray(block)) {
-    for (const [name, value] of Object.entries(block)) {
-      if (typeof value !== 'string' || value.length === 0 || value.length > MAX_AUTH_VALUE || /[\0\r\n]/.test(value)) continue;
-      if (!AUTH_SETTING_ENV.some(pattern => pattern.test(name))) continue;
-      if (env && Object.hasOwn(env, name)) continue;
-      variables[name] = value;
-    }
-  }
-  const notes = [];
-  if (relative.length) notes.push(`${relative.join(' and ')} names a program by a relative path, which Fleet does not run from a subagent's folder (use a full path)`);
-  if (writable.length) notes.push(`${writable.join(' and ')} names a program inside a folder a subagent can write, so Fleet will not run it (move it outside the workspace and the temporary folders)`);
-  return Object.freeze({ settings: Object.freeze(settings), env: Object.freeze(variables),
-    note: notes.length ? notes.join('; ') : null });
-}
-
-/* The environment and the --settings keys a Claude subagent, and the setup
-   sign-in check, run with. A new environment object; the caller's is unchanged. */
-function claudeAuthLaunch(baseEnvironment, { workspace = null, extraRoots = [] } = {}) {
-  const found = readUserAuthSettings({ env: baseEnvironment, workspace, extraRoots });
-  return Object.freeze({ env: { ...baseEnvironment, ...found.env }, settings: found.settings, note: found.note });
-}
-
 /* A pinned CLI path, checked again just before a launch: still absolute,
    still an executable file, and neither it nor its real path inside a folder
    a subagent can write. */
@@ -410,8 +309,6 @@ module.exports = Object.freeze({
   agentCliEnvironment,
   agentSearchPath,
   assertAgentCliPath,
-  claudeAuthLaunch,
-  readUserAuthSettings,
   confinedAgentCliEnvironment,
   assertNoBillingCredentials,
   credentialFreeEnvironment,

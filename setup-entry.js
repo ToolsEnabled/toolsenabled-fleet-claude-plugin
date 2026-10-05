@@ -3,15 +3,17 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { absolute, resolveConfig, configureEnvironment } = require('./runtime-config');
+const { absolute, resolveConfig, configureEnvironment, childEnvironment } = require('./runtime-config');
 const { real, inside, projectFolder } = require('./project-folder');
 // Agent CLIs that Fleet can start as subagents on this computer, as equal
-// entries. Fleet runs each CLI's own sign-in status command and uses only its
-// exit status; it never reads, copies or stores a sign-in. A CLI whose
-// subagents run in its own operating-system sandbox also names a command that
-// starts that sandbox around /bin/true in the project, with no model call.
+// entries. Fleet runs each CLI's own sign-in status command, with the launch
+// options a subagent starts with, and uses only its exit status; it never reads,
+// copies or stores a sign-in. "Signed in" therefore means a subagent can sign
+// in. A CLI whose subagents run in its own operating-system sandbox also names a
+// command that starts that sandbox around /bin/true in the project, with no
+// model call.
 const SUBAGENT_CLIS = Object.freeze({
-  claude: Object.freeze({ status: Object.freeze(['auth', 'status']), signIn: 'claude auth login' }),
+  claude: Object.freeze({ status: Object.freeze(['--setting-sources', '', '--restricted', 'auth', 'status']), signIn: 'claude auth login' }),
   codex: Object.freeze({ status: Object.freeze(['login', 'status']), signIn: 'codex login',
     sandbox: Object.freeze({ args: workspace => ['sandbox', '-P', ':workspace', '-C', workspace, '/bin/true'],
       help: 'https://developers.openai.com/codex/concepts/sandboxing#prerequisites' }) }),
@@ -150,8 +152,8 @@ function checkProject(workspace, options) {
   return workspace;
 }
 // Which installed CLIs are signed in and can run here. The checks run with the
-// environment subagents get: the person's own, including each CLI's sign-in
-// variables, without the lead session's bindings, and PATH without folders in
+// environment subagents get: the person's own, without any provider sign-in
+// variable and without the lead session's bindings, and PATH without folders in
 // the project, Fleet's state folder or a temporary folder.
 function survey(config, { env = process.env, run = spawnSync, workspace = null } = {}) {
   const launch = launchRules();
@@ -161,34 +163,23 @@ function survey(config, { env = process.env, run = spawnSync, workspace = null }
   const ready = [];
   const signedOut = [];
   const noSandbox = [];
-  const notes = {};
   for (const cli of found) {
     const info = SUBAGENT_CLIS[cli.name];
-    // A Claude subagent starts without the person's settings files but with
-    // their sign-in settings, so the check runs the way the subagent will:
-    // "ready" must mean the subagent can sign in.
-    let statusArgs = info.status;
-    let statusEnv = clean;
-    if (cli.name === 'claude') {
-      const signIn = launch.claudeAuthLaunch(clean, { workspace });
-      statusEnv = signIn.env;
-      statusArgs = ['--setting-sources', '', ...(Object.keys(signIn.settings).length ? ['--settings', JSON.stringify(signIn.settings)] : []), ...info.status];
-      if (signIn.note) notes[cli.name] = signIn.note;
-    }
-    const result = run(cli.file, statusArgs, { env: statusEnv, stdio: 'ignore', timeout: 15000 });
+    const result = run(cli.file, info.status, { env: clean, stdio: 'ignore', timeout: 15000 });
     if (result.status !== 0) { signedOut.push(cli.name); continue; }
     if (info.sandbox && workspace && fs.existsSync(workspace)) {
-      const probe = run(cli.file, info.sandbox.args(workspace), { cwd: workspace, env: clean, encoding: 'utf8',
+      const startsSandbox = () => run(cli.file, info.sandbox.args(workspace), { cwd: workspace, env: clean, encoding: 'utf8',
         stdio: ['ignore', 'ignore', 'pipe'], timeout: 20000, maxBuffer: 64 * 1024 });
-      if (probe.status === 1 && SANDBOX_FAILURE.test(String(probe.stderr || ''))) { noSandbox.push(cli.name); continue; }
+      const failed = probe => probe.status === 1 && SANDBOX_FAILURE.test(String(probe.stderr || ''));
+      // One failure can be a race with another start of the same CLI, so it is asked once more before the CLI is turned off.
+      if (failed(startsSandbox()) && failed(startsSandbox())) { noSandbox.push(cli.name); continue; }
     }
     ready.push(cli.name);
   }
-  return { installed: found.map(cli => cli.name), ready, signedOut, noSandbox, notes };
+  return { installed: found.map(cli => cli.name), ready, signedOut, noSandbox };
 }
-function signInHint(name, status = {}) {
-  const why = status.notes && status.notes[name] ? ` Fleet could not use your sign-in settings because ${status.notes[name]}.` : '';
-  return `${name} is installed but not signed in.${why} To use it for subagents, run \`${SUBAGENT_CLIS[name].signIn}\` once in a terminal, then run ${SETUP_COMMAND} again.`;
+function signInHint(name) {
+  return `${name} is installed, but Fleet found no saved login its subagents can use. Subagents use a CLI's own saved login, not sign-in variables or settings files, so a sign-in kept only in one of those does not count. To use ${name}, run \`${SUBAGENT_CLIS[name].signIn}\` once in a terminal, then run ${SETUP_COMMAND} again.`;
 }
 function sandboxHint(name) {
   return `${name} is signed in, but its sandbox cannot start on this computer, so its subagents could not edit files. Follow ${SUBAGENT_CLIS[name].sandbox.help}, then run ${SETUP_COMMAND} again.`;
@@ -197,7 +188,7 @@ function surveyNote(status) {
   if (!status.installed.length) {
     return `Subagents are off because no supported agent CLI (${Object.keys(SUBAGENT_CLIS).join(', ')}) was found on PATH. Install one, sign in, then run ${SETUP_COMMAND} again.`;
   }
-  return [...status.signedOut.map(name => signInHint(name, status)), ...status.noSandbox.map(sandboxHint)].join('\n');
+  return [...status.signedOut.map(signInHint), ...status.noSandbox.map(sandboxHint)].join('\n');
 }
 // The person may name which signed-in CLIs subagents use; by default all of them.
 function chosenProviders(status, list) {
@@ -207,7 +198,7 @@ function chosenProviders(status, list) {
   if (!asked.length || unknown.length) throw new Error(`Choose subagent CLIs from: ${Object.keys(SUBAGENT_CLIS).join(', ')}.`);
   const unavailable = asked.filter(name => !status.ready.includes(name));
   if (unavailable.length) {
-    throw new Error(unavailable.map(name => (status.signedOut.includes(name) ? signInHint(name, status)
+    throw new Error(unavailable.map(name => (status.signedOut.includes(name) ? signInHint(name)
       : status.noSandbox.includes(name) ? sandboxHint(name) : `${name} is not installed on PATH.`)).join(' '));
   }
   return Object.keys(SUBAGENT_CLIS).filter(name => asked.includes(name));
@@ -237,7 +228,7 @@ function chosenModels(config, chosen, list) {
 // Run one setup attempt in its own process and return its JSON result.
 function runSetup(hostEntry, args) {
   const result = spawnSync(process.execPath, [hostEntry, ...args],
-    { env: process.env, encoding: 'utf8', timeout: 30000, maxBuffer: 1024 * 1024 });
+    { env: childEnvironment(), encoding: 'utf8', timeout: 30000, maxBuffer: 1024 * 1024 });
   if (result.status !== 0) throw new Error(result.error?.message || String(result.stderr || 'Setup failed.').trim());
   return JSON.parse(result.stdout.slice(result.stdout.indexOf('{')));
 }

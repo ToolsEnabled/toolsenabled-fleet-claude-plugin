@@ -470,9 +470,9 @@ async function cleanFailedStartup({ error, startup, adapter, transport, cleanupT
  * the only one that works, because `-c mcp_servers...` overrides on
  * the app-server argv are refused for HTTP-transport and plugin-declared servers
  * and silently ignored as a whole-table assignment. It is threaded through BOTH
- * spawns deliberately: version detection that read a different home than the
- * session would report the capabilities of a Codex the session is not running
- * under. Undefined keeps process.env, so every existing caller is unchanged. */
+ * spawns deliberately: version detection against a different configuration
+ * would report capabilities for another session. Undefined keeps process.env,
+ * so every existing caller is unchanged. */
 async function startCodexSession({
   cwd,
   clientInfo,

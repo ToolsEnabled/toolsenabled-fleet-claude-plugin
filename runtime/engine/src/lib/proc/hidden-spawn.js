@@ -47,7 +47,6 @@
 const path = require('node:path');
 const { spawn: nodeSpawn } = require('node:child_process');
 const {
-  BILLING_TRIPWIRE,
   agentCliEnvironment,
 } = require('../supervision/launch-environment');
 const { spawnLinuxOwned } = require('../linux-process-control');
@@ -171,41 +170,16 @@ function spawnHidden(command, args = [], options = {}) {
     : baseEnv;
 
   /* EVERY CHILD STARTED HERE IS AN AGENT CLI (codex-process.js and
-     claude-cli-process.js are the requirers), and an agent CLI runs on the
-     person's own sign-in exactly as it would from their terminal: its own
-     sign-in variables pass through, and only the lead session's bindings are
-     removed (agentCliEnvironment, src/lib/supervision/launch-environment.js).
-
-     A stated credential overlay is still validated: limited to names the
-     credential list knows, and errors name only the variable -- credential
-     values never enter diagnostics. */
-  const credentialEnvironment = options.credentialEnvironment === undefined
-    ? {}
-    : options.credentialEnvironment;
-  if (
-    credentialEnvironment === null
-    || typeof credentialEnvironment !== 'object'
-    || Array.isArray(credentialEnvironment)
-  ) {
+     claude-cli-process.js are the requirers). Fleet gives it no provider
+     sign-in variable: agentCliEnvironment (src/lib/supervision/launch-environment.js)
+     removes them, and each CLI signs in by its own saved login. There is no
+     channel to add one back, so a caller that states a credential overlay is
+     refused instead of carried. */
+  if (options.credentialEnvironment !== undefined) {
     throw new HiddenSpawnError(
-      'HIDDEN_SPAWN_CREDENTIAL_ENVIRONMENT_INVALID',
-      'spawnHidden credentialEnvironment must be an object of caller-stated credential variables',
+      'HIDDEN_SPAWN_CREDENTIAL_ENVIRONMENT_REFUSED',
+      'spawnHidden gives a child no provider sign-in variable and has no channel to add one',
     );
-  }
-  const allowedCredentialNames = new Set(BILLING_TRIPWIRE.map(name => name.toLowerCase()));
-  for (const [name, value] of Object.entries(credentialEnvironment)) {
-    if (!allowedCredentialNames.has(name.toLowerCase())) {
-      throw new HiddenSpawnError(
-        'HIDDEN_SPAWN_CREDENTIAL_NAME_INVALID',
-        `spawnHidden credentialEnvironment cannot carry unrecognized variable ${name}`,
-      );
-    }
-    if (typeof value !== 'string' || value.length === 0) {
-      throw new HiddenSpawnError(
-        'HIDDEN_SPAWN_CREDENTIAL_VALUE_INVALID',
-        `spawnHidden credentialEnvironment variable ${name} must be a non-empty string`,
-      );
-    }
   }
 
   const {
@@ -231,17 +205,8 @@ function spawnHidden(command, args = [], options = {}) {
    * disappears. Short probes keep the original direct-spawn path so version
    * checks do not pay for a containment supervisor.
    *
-   * Explicit post-scrub credentials are not silently stripped by a second
-   * scrub and are not handed to a generic containment helper as an escape
-   * hatch. No current contained caller uses that channel; refuse the combined
-   * shape if one ever tries. */
+   */
   if (containProcessTree && process.platform === 'linux') {
-    if (Object.keys(credentialEnvironment).length > 0) {
-      throw new HiddenSpawnError(
-        'HIDDEN_SPAWN_CONTAINMENT_CREDENTIALS_REFUSED',
-        'A contained hidden child cannot use the post-scrub credential channel',
-      );
-    }
     const containedCwd = path.resolve(rest.cwd || process.cwd());
     const child = spawnLinuxOwned(invocation.command, invocation.args, {
       ...rest,
@@ -257,7 +222,7 @@ function spawnHidden(command, args = [], options = {}) {
 
   // No containment wrapper on this path. The same check runs immediately before
   // the direct root, after resolution and environment preparation, not earlier.
-  const directEnvironment = Object.assign(agentCliEnvironment(childEnv), credentialEnvironment);
+  const directEnvironment = agentCliEnvironment(childEnv);
   beforeRootSpawn?.();
   const child = nodeSpawn(invocation.command, invocation.args, {
     ...rest,

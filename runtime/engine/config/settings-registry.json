@@ -236,19 +236,16 @@
       "depth": 1,
       "control": "seg",
       "default": "Only",
-      "consequence": "Choose which tools new subagents get. Only, the default: Claude Code subagents get Read, Edit and Write in the project plus Fleet's coordination tools, and Codex subagents get Fleet's tools and Codex's own file editing with its shell off. Optimized: the same for Claude Code subagents, and Codex subagents do not start. Enabled: Codex subagents also get Codex's own tools, including its shell in Codex's sandbox with network off; Claude Code subagents get the same as Only. Disabled: no Fleet tools; Claude Code subagents keep Read, Edit and Write in the project and Codex subagents keep Codex's own tools. Subagents already running keep the tools they started with.",
+      "consequence": "The four choices remain valid so an earlier saved choice still applies. Every mode gives every new subagent the same confined file tools and Fleet coordination tools. Subagents already running keep the tools they started with.",
       "capabilities": [
-        "Choose, for new subagents, between Fleet's tools, Fleet's tools with an agent CLI's own tools, and an agent CLI's own tools alone.",
+        "Keep an earlier saved mode valid while every new subagent gets the same tools.",
         "Fleet's tool calls keep their permission checks and, with audit on, their signed records."
       ],
       "risks": [
-        "Only can block a task when Fleet has no tool for something an agent CLI's own tool would do.",
-        "Optimized starts Claude Code subagents only; Codex subagents do not start while it is selected.",
-        "Enabled lets Codex subagents use Codex's own tools, which Fleet's audit does not record.",
-        "Disabled takes Fleet's coordination tools, such as subagents, messages, tasks and the ledger, away from new subagents."
+        "A task may be blocked when Fleet has no tool for an action the agent CLI could otherwise perform."
       ],
       "derivedFrom": "built-in product policy",
-      "enforcedBy": "src/lib/agent-api-mode.js defines the modes; src/lib/settings.js reconciles stored choices; src/lib/agent-api-policy.js and src/lib/agent-session-confinement.js apply the mode to new Claude Code and Codex subagents.",
+      "enforcedBy": "src/lib/agent-api-mode.js defines the saved modes; src/lib/settings.js reconciles stored choices; src/lib/host-worker-session.js applies the same tool set to every new subagent.",
       "applies": "next-session",
       "options": [
         "Only",
@@ -391,7 +388,7 @@
       "depth": 1,
       "control": "select",
       "default": "ToolsEnabled only",
-      "consequence": "The older name for the Agent API mode, kept so a choice saved by an earlier version still applies. ToolsEnabled only means Only, ToolsEnabled and selected native tools means Optimized, ToolsEnabled and native tools means Enabled, and Native tools only means Disabled. Settings shows the Agent API mode instead.",
+      "consequence": "The older name for the Agent API mode is kept so an earlier saved choice still applies. It mirrors the same four choices; every mode gives every new subagent the same tools. Settings shows the Agent API mode instead.",
       "capabilities": [
         "Keeps a tool choice saved by an earlier version working."
       ],
@@ -402,7 +399,7 @@
       "enforcedBy": "src/lib/agent-api-mode.js maps it to agent.agent_api; src/lib/settings.js reconciles the two; src/lib/tool-mode.js names the values.",
       "options": [
         "ToolsEnabled only",
-        "ToolsEnabled and selected native tools",
+        "ToolsEnabled only (earlier Optimized choice)",
         "ToolsEnabled and native tools",
         "Native tools only"
       ],

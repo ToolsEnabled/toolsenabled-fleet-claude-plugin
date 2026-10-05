@@ -164,7 +164,7 @@ const SUPPORTED_PROTOCOLS = Object.freeze(['2025-11-25', '2025-06-18', '2025-03-
 // historical `coordinator` principal carry broader authority and cannot be
 // selected through an environment variable. Handlers keep their own role and
 // permission checks.
-const AGENT_ACTOR_VALUES = new Set(['codex', 'claude']);
+const { isProviderId } = require('./lib/openshell-worker-providers');
 const DECLARED_AGENT_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 // The standing-rule tools carry the same binding: the attribution written on
 // the ledger's head line is the principal this transport was started as.
@@ -303,12 +303,11 @@ function requireObject(value, label, optional = false) {
 
 function bindAgentActor(name, args, boundActor = process.env.TOOLSENABLED_AGENT_ACTOR) {
   if (!R_LEDGER_ACTOR_BOUND_TOOLS.has(name)) return args;
-  const bound = String(boundActor || '').trim().toLowerCase();
-  if (!AGENT_ACTOR_VALUES.has(bound)) {
-    throw new RpcError(-32602, 'This ledger mutation requires a transport-bound TOOLSENABLED_AGENT_ACTOR (codex or claude).');
+  if (!isProviderId(boundActor)) {
+    throw new RpcError(-32602, 'This ledger mutation requires a transport-bound provider id.');
   }
-  if (!args || args.actor !== bound) {
-    throw new RpcError(-32602, `Ledger actor must match this transport-bound principal ('${bound}').`);
+  if (Object.hasOwn(args, 'actor')) {
+    throw new RpcError(-32602, 'Ledger actor comes from the transport; omit actor from the call.');
   }
   return args;
 }

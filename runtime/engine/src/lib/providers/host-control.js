@@ -17,231 +17,12 @@ const audit = require('../audit');
 const auditAdmission = require('../operation-audit');
 const { canonicalizeForContainment } = require('../canonical-path');
 const { withSharedWrite } = require('../shared-write-guard');
+const protectedNames = require('../protected-names');
+const { EXCLUDED_PATH_PATTERNS, WRITE_EXCLUDED_PATH_PATTERNS, isCredentialStorePath } = protectedNames;
 
 const HOME = process.platform === 'linux' ? os.userInfo().homedir : os.homedir();
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_LIST_ENTRIES = 5000;
-
-// Excluded from the FILE surface regardless of how the path is spelled --
-// READ and WRITE both. Treat this list as "every place a credential, session
-// token, or capability secret is known to live on a real machine," not just
-// "the ones this feature happened to touch": AI-tool and cloud-CLI credential
-// stores on an ordinary developer profile (.codex/auth.json,
-// .claude/.credentials.json, .gemini/oauth_creds.json and gcloud's
-// application_default_credentials.json), and the product's state/ folder,
-// whose helper tokens and capability files would let a caller escalate past
-// this whole module by reading them. Credential-store folders and the Windows
-// DPAPI material are excluded outright. .ssh/.aws/.gnupg/.docker/.kube and the
-// browser profiles are the same class of thing: long-lived credentials and
-// authenticated session state that no file-read capability should hand over
-// wholesale (profiles/chrome additionally carries remembered-device MFA
-// state, which can stand for a year or more and cannot be recreated without a
-// human physically approving a fresh push).
-const EXCLUDED_PATH_PATTERNS = [
-  /[\\/]vault([\\/]|$)/i,
-  /[\\/]\.ssh([\\/]|$)/i,
-  /[\\/]\.aws([\\/]|$)/i,
-  /[\\/]\.gnupg([\\/]|$)/i,
-  /[\\/]\.docker([\\/]|$)/i,
-  /[\\/]\.kube([\\/]|$)/i,
-  /[\\/]\.netrc$/i,
-  /[\\/]\.git-credentials$/i,
-  /[\\/](?:\.pgpass|\.my\.cnf|\.claude\.json|\.vault-token|\.Xauthority|key4\.db|Login Data|login\.keyring)$/i,
-  /[\\/]kaggle\.json$/i,
-  // Private SSH keys by their usual exact names (never the .pub halves).
-  /[\\/]id_(?:rsa|dsa|ecdsa|ed25519)(?:_sk)?$/i,
-  /[\\/]\.m2[\\/]settings\.xml$/i,
-  /[\\/]\.(?:cargo|gem)[\\/]credentials(?:\.toml)?$/i,
-  /[\\/][^\\/]*_history$/i,
-  // Package-manager and infrastructure CLI credential files. Keep these
-  // exact/bounded: an ordinary profile file must remain usable even when it
-  // lives beside one of these stores.
-  /[\\/]\.npmrc$/i,
-  /[\\/]\.pypirc$/i,
-  /[\\/]NuGet[\\/]NuGet\.Config$/i,
-  /[\\/]\.nuget[\\/]NuGet\.Config$/i,
-  /[\\/]\.azure[\\/](?:azureProfile\.json|AzureRmContext\.json|accessTokens\.json|msal_token_cache\.bin)$/i,
-  /[\\/]\.terraform\.d[\\/]credentials\.tfrc\.json$/i,
-  /[\\/]\.config[\\/]gh[\\/]hosts\.ya?ml$/i,
-  /[\\/]WindowsPowerShell[\\/]PSReadLine[\\/]ConsoleHost_history\.txt$/i,
-  /[\\/]PowerShell[\\/]PSReadLine[\\/]ConsoleHost_history\.txt$/i,
-  /[\\/]ConsoleHost_history\.txt$/i,
-  /[\\/]\.(?:bash_history|zsh_history|fish_history|python_history)$/i,
-  // Shell and login files commonly export provider keys. They are also
-  // executable inputs, so neither reads nor writes belong to a model tool.
-  /[\\/]\.(?:bashrc|bash_profile|bash_login|profile|zshrc|zshenv|zprofile|zlogin|kshrc|cshrc|tcshrc|inputrc|xprofile|xinitrc|pam_environment|envrc)$/i,
-  /[\\/]profiles[\\/]chrome([\\/]|$)/i,
-  /[\\/]AppData[\\/]Local[\\/]Google[\\/]Chrome([\\/]|$)/i,
-  /[\\/]AppData[\\/]Local[\\/]Microsoft[\\/]Credentials([\\/]|$)/i,
-  /[\\/]AppData[\\/]Roaming[\\/]Microsoft[\\/]Crypto([\\/]|$)/i,
-  /[\\/]AppData[\\/]Roaming[\\/]Microsoft[\\/]Protect([\\/]|$)/i,
-  // AI CLI / cloud CLI OAuth and API-key stores; every one carries a live
-  // refresh token or API key.
-  /[\\/]\.codex([\\/]|$)/i,
-  /[\\/]\.claude([\\/]|$)/i,
-  /[\\/]\.gemini([\\/]|$)/i,
-  /[\\/]\.config([\\/]|$)/i,
-  /[\\/]AppData[\\/]Roaming[\\/]gcloud([\\/]|$)/i,
-  // state/ holds helper tokens and capability files; reading one is a direct
-  // escalation past this module. Matches a ToolsEnabled checkout AND every
-  // ToolsEnabled-* sibling (see the WRITE_EXCLUDED comment below for why the
-  // name must be a prefix match, not an exact segment match).
-  /[\\/]ToolsEnabled[^\\/]*[\\/]state([\\/]|$)/i
-];
-
-// A small, extension-bounded set of conventional credential/session stores.
-// This intentionally does not reject arbitrary files merely because their
-// contents might be sensitive; the known stores above and these common data
-// basenames are the protection boundary for this broad host surface.
-//
-// The password / *_key / private_key+service_account / keystore+kdbx+wallet
-// stem groups match egress-preflight.js's CREDENTIAL_NAME_PATTERN, which that
-// file's own comment says it mirrors, so a file named password.json,
-// access_key.json, service_account.json or wallet.json anywhere inside the
-// profile is neither readable through host.read_file nor visible in
-// host.list_dir. Stems only: the extension list is bounded, so this does not
-// become a rule about arbitrary files.
-const COMMON_CREDENTIAL_STORE_PATTERN = /[\\/](?:\.(?:auth|token|tokens|cookie|cookies|credential|credentials|session|sessions|password|passwords|passwd|passphrase|passphrases|keystore|keystores|kdbx|wallet|wallets)|auth|token|tokens|cookie|cookies|credential|credentials|session|sessions|passwords?|passwd|passphrases?|(?:access|refresh|bearer)[._-]?(?:keys?|tokens?)|private[._-]?keys?|service[._-]?accounts?|keystores?|kdbx|wallets?)(?:[._-][^\\/]*)?\.(?:json|jsonl|ya?ml|toml|ini|cfg|conf|db|sqlite3?)$/i;
-
-// A NAME pattern, beside the two above rather than folded into either.
-//
-// The two patterns above are PATH-shaped: EXCLUDED_PATH_PATTERNS matches
-// credential DIRECTORIES, and COMMON_CREDENTIAL_STORE_PATTERN matches a
-// conventional basename anchored to a path separator with a narrow extension
-// tail that carries no pem/key/p12/pfx. Between them, a file named
-// private_key.pem in an ordinary folder inside the profile would be readable
-// through host.read_file, refused by neither this sink nor egress.
-//
-// This is the same four CLEAN stem groups and the same extension tail that
-// src/lib/egress-preflight.js's CREDENTIAL_NAME_PATTERN already applies to the
-// FILENAME ALONE, kept deliberately in that pattern's shape so the two read as
-// the mirrors they are. Egress and read now agree on this class of name, which
-// is the whole point: a file that cannot leave should not be readable either.
-//
-// THREE GROUPS ARE DELIBERATELY NOT PORTED to this name pattern:
-//   1. extensionless "credentials" / "secrets"
-//   2. the id_rsa family
-//   3. stem-agnostic .pem / .jks / .kdbx / .ppk
-// Each requires removing the mandatory extension tail (1, 2) or refusing on
-// extension alone (3), which widens refusals for every caller of this surface.
-// The exact private SSH key names of group 2 (id_rsa, id_ed25519 and the rest,
-// not their .pub halves) are refused by EXCLUDED_PATH_PATTERNS above instead,
-// as Claude subagents' read rules refuse them; the rest remain readable here
-// and are named so the gap is visible rather than assumed closed.
-//
-// The stems are bounded on both sides so near-misses stay readable: an ordinary
-// walletbuilder.pem, passenger.json, keyboard.pem, accessibility.json or
-// service.pem is NOT refused. A rule that refuses ordinary work is not a safer
-// rule.
-const CREDENTIAL_SHAPED_NAME_PATTERN = /(?:^|[._-])(?:passwords?|passwd|passphrases?|(?:access|refresh|bearer)[._-]?(?:keys?|tokens?)|private[._-]?keys?|service[._-]?accounts?|keystores?|kdbx|wallets?)(?:[._-][^./\\]*)?\.(?:json|jsonl|ya?ml|toml|ini|cfg|conf|env|pem|key|p12|pfx|db|sqlite3?)$/i;
-
-function isProtectedEnvironmentPath(candidatePath) {
-  const basename = path.basename(candidatePath).toLowerCase();
-  if (basename === '.env') return true;
-  if (!basename.startsWith('.env.')) return false;
-  return !['.env.example', '.env.template', '.env.sample'].includes(basename);
-}
-
-function isCredentialShapedName(candidatePath) {
-  return CREDENTIAL_SHAPED_NAME_PATTERN.test(path.basename(candidatePath));
-}
-
-function isCredentialProtectedPath(candidatePath) {
-  return EXCLUDED_PATH_PATTERNS.some(pattern => pattern.test(candidatePath))
-    || COMMON_CREDENTIAL_STORE_PATTERN.test(candidatePath)
-    || isCredentialShapedName(candidatePath)
-    || isProtectedEnvironmentPath(candidatePath);
-}
-
-// WRITE-ONLY exclusions: readable, but never writable through this surface.
-// These are the integrity anchors that decide whether this capability is
-// itself still constrained -- if the caller can write them, it can rewrite
-// its own limits, and every other check here becomes decorative.
-//
-// Path segments read "ToolsEnabled[^\\/]*" rather than an exact "ToolsEnabled"
-// match, so sibling checkouts such as ToolsEnabled-<name> are covered too: a
-// forged standing-orders or policy file planted in one would otherwise be read
-// as authoritative by anything whose rootPath resolved there.
-//
-// config/ carries the policy and model floor: a caller able to write it could
-// flip approvals.enabled or repoint killswitchFile with no audit trail.
-// logs/ and reports/ are the audit-adjacent record; node_modules and the
-// global git/npm config files are execution-persistence vectors (a crafted
-// diff driver or textconv in ~/.gitconfig runs on the next `git diff`/`git
-// log -p`/`git show` ANY local process makes).
-const WRITE_EXCLUDED_PATH_PATTERNS = [
-  // A normal project can execute these on the next shell, Git, editor, CI or
-  // task-runner action. Protect them even when the project is not Fleet's own.
-  /[\\/]\.(?:git|hg|svn|bzr|pijul|fossil-settings)([\\/]|$)/i,
-  /[\\/]\.(?:vscode|idea|zed|cursor|windsurf|devcontainer)([\\/]|$)/i,
-  /[\\/]\.github[\\/]workflows([\\/]|$)/i,
-  /[\\/]\.github[\\/]actions([\\/]|$)/i,
-  /[\\/](?:\.husky|\.githooks|\.circleci)([\\/]|$)/i,
-  /[\\/][^\\/]+\.git[\\/](?:hooks|config)([\\/]|$)/i,
-  /[\\/](?:\.gitlab-ci\.ya?ml|lefthook[^\\/]*\.ya?ml|mise\.toml|\.yarnrc[^\\/]*|\.cargo[\\/]config[^\\/]*)$/i,
-  /[\\/]node_modules[\\/]\.bin([\\/]|$)/i,
-  /[\\/]\.venv[\\/]bin([\\/]|$)/i,
-  /[\\/](?:venv|env)[\\/]bin([\\/]|$)/i,
-  /[\\/]site-packages[\\/][^\\/]+\.pth$/i,
-  /[\\/](?:\.mcp\.json|\.mise\.toml|\.pnpmfile\.cjs|sitecustomize\.py|conftest\.py)$/i,
-  /[\\/](?:package\.json|GNUmakefile|Makefile|[Jj]ustfile|Taskfile(?:\.ya?ml)?|Gruntfile\.[cm]?js|gulpfile\.[cm]?js|tox\.ini|noxfile\.py|pyproject\.toml|Procfile|Dockerfile|compose\.ya?ml|\.pre-commit-config\.ya?ml)$/i,
-  /[\\/]\.local[\\/]bin([\\/]|$)/i,
-  // Claude Code's own protected paths (https://code.claude.com/docs/en/permission-modes,
-  // "Protected paths"), which package managers, build tools, editors and
-  // dev containers load or run from a project. A Claude subagent cannot write
-  // them through Claude Code; no subagent writes them through these tools.
-  /[\\/]\.(?:yarn|mvn|cargo)([\\/]|$)/i,
-  /[\\/](?:\.gitmodules|\.pnp\.cjs|\.pnp\.loader\.mjs|\.?bunfig\.toml|\.bazelrc|\.bazelversion|\.bazeliskrc|\.lefthook\.ya?ml|gradle-wrapper\.properties|maven-wrapper\.properties|\.devcontainer\.json|\.ripgreprc|pyrightconfig\.json)$/i,
-  /[\\/]\.(?:bash_aliases|bash_logout|zlogout)$/i,
-  // Agent instruction files, which the next Claude Code, Codex or Gemini
-  // session in the project reads as the person's instructions, and build and
-  // environment files that run code on the next build, install, `cd` (direnv,
-  // Nix) or editor start (exrc). A subagent must not plant either for the
-  // person or for the next agent.
-  /[\\/](?:CLAUDE(?:\.local)?|AGENTS(?:\.override)?|GEMINI)\.md$/i,
-  /[\\/](?:\.cursorrules|\.windsurfrules|\.clinerules|\.agents)([\\/]|$)/i,
-  /[\\/]\.github[\\/](?:copilot-instructions\.md$|instructions([\\/]|$))/i,
-  /[\\/](?:setup\.py|usercustomize\.py|build\.rs|Cargo\.toml|(?:build|settings)\.gradle(?:\.kts)?|gradle\.properties|gradlew(?:\.bat)?|mvnw(?:\.cmd)?|pom\.xml|Pipfile|Gemfile|[^\\/]+\.gemspec|Rakefile|CMakeLists\.txt|meson\.build|composer\.json|deno\.jsonc?|Vagrantfile|Earthfile|(?:flake|shell|default)\.nix)$/i,
-  /[\\/](?:buildSrc|\.direnv)([\\/]|$)/i,
-  /[\\/](?:\.vimrc|\.exrc|\.nvimrc|\.nvim\.lua|\.lazy\.lua)$/i,
-  /[\\/]ToolsEnabled[^\\/]*[\\/]state([\\/]|$)/i,
-  /[\\/]ToolsEnabled[^\\/]*[\\/]config[\\/][^\\/]*\.policy\.json$/i,
-  // Generic host writes must not stage replacement code or runtime artifacts
-  // in any ToolsEnabled checkout.
-  //
-  // THE CODE-FOLDER RULE ITSELF LIVES IN WRITE_EXCLUDED_CODE_PATTERNS, directly
-  // below. It names the folders where each package's own manifest says its
-  // code starts (bin and shell as well as src), not just a convention. It is
-  // the one rule the person may lift for their own checkouts
-  // (agent.product_source_writes), and the anchors in this list are not. See
-  // isProductCodeWriteAllowed() for the exact rule.
-  /[\\/]ToolsEnabled[^\\/]*[\\/]logs([\\/]|$)/i,
-  /[\\/]ToolsEnabled[^\\/]*[\\/]\.git([\\/]|$)/i,
-  /[\\/]ToolsEnabled[^\\/]*[\\/]node_modules([\\/]|$)/i,
-  /[\\/]ToolsEnabled[^\\/]*[\\/]reports[\\/]OWNER-REQUEST-LEDGER/i,
-  /[\\/]ToolsEnabled[^\\/]*[\\/]STANDING-ORDERS\.md$/i,
-  /[\\/]ToolsEnabled[^\\/]*[\\/]CLAUDE\.md$/i,
-  /[\\/]ToolsEnabled[^\\/]*[\\/]AGENTS\.md$/i,
-  /[\\/]ToolsEnabled[^\\/]*[\\/]GEMINI\.md$/i,
-  /[\\/]ToolsEnabled[^\\/]*[\\/]BUILD-QUEUE\.md$/i,
-  /[\\/]ToolsEnabled[^\\/]*[\\/]docs[\\/]ROLE-OPERATIONS\.md$/i,
-  /[\\/]ToolsEnabled[^\\/]*[\\/]reports[\\/]TOOLSENABLED-SUGGESTIONS\.md$/i,
-  /[\\/]ToolsEnabled[^\\/]*[\\/]package(-lock)?\.json$/i,
-  /[\\/]ToolsEnabled[^\\/]*[\\/](?:npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb)$/i,
-  /[\\/]ToolsEnabled[^\\/]*[\\/]KILLSWITCH$/i,
-  /[\\/]\.gitconfig$/i,
-  /[\\/]\.npmrc$/i,
-  // BOTH PowerShell editions. Windows PowerShell 5.1 reads
-  // Documents\WindowsPowerShell; PowerShell 6/7+ reads Documents\PowerShell --
-  // a different folder, the same autorun, profile and Modules\ alike (a module
-  // dropped in Modules\ is auto-discovered by name, no profile edit needed).
-  // Anchored on the segment, so a folder merely starting with "PowerShell" is
-  // not swept in.
-  /[\\/]Documents[\\/](?:WindowsPowerShell|PowerShell)([\\/]|$)/i,
-  // Anything that gets executed on a schedule or at logon is a persistence
-  // and privilege-escalation path, not an ordinary file.
-  /[\\/]AppData[\\/]Roaming[\\/]Microsoft[\\/]Windows[\\/]Start Menu[\\/]Programs[\\/]Startup([\\/]|$)/i
-];
 
 // THE PRODUCT CODE FOLDERS, kept apart from the anchors above because they are
 // the one rule the person may lift (agent.product_source_writes) for checkouts
@@ -538,6 +319,22 @@ function checkExecutablePathDirectory(candidatePath) {
   }
 }
 
+// The shared name rules are written relative to a project. In a running host
+// session that is the saved workspace; otherwise the home folder.
+function nameBase(candidatePath) {
+  if (pinnedHostWorkspace) {
+    const root = pinnedHostWorkspace.find(workspaceRoot => containsOrEquals(workspaceRoot, candidatePath));
+    if (root) return root;
+  }
+  return HOME;
+}
+function isCredentialProtectedPath(candidatePath) {
+  return protectedNames.isCredentialProtectedPath(candidatePath, nameBase(candidatePath));
+}
+function protectedEditName(candidatePath) {
+  return protectedNames.isProtectedEditPath(candidatePath, nameBase(candidatePath));
+}
+
 // Runs the containment + exclusion checks against ONE candidate path string.
 // Called twice by resolveHostPath below: once on the lexical (path.resolve)
 // form, once on the canonical (reparse-point-resolved) form. A lexical-only
@@ -552,13 +349,19 @@ function checkContainmentAndExclusions(candidatePath, { forWrite }) {
   if (relativeToHome.startsWith('..') || path.isAbsolute(relativeToHome)) {
     fail('HOST_PATH_OUTSIDE_PROFILE', 'path must be inside your home folder.');
   }
-  if (isCredentialProtectedPath(candidatePath)) {
-    fail('HOST_PATH_FORBIDDEN', 'path holds credentials, sign-in sessions or environment secrets, which Fleet never reads or writes.');
+  // A write to a protected project file that is not a credential store (version
+  // control internals, for one) keeps the exact refusal below.
+  if (isCredentialProtectedPath(candidatePath)
+      && !(forWrite && !isCredentialStorePath(candidatePath) && protectedEditName(candidatePath))) {
+    fail('HOST_PATH_FORBIDDEN', 'path is protected project or account data, which Fleet file tools never read or write.');
   }
   if (forWrite) checkRuntimeWriteRoots(candidatePath);
   checkHostWorkspaceBoundary(candidatePath);
   if (forWrite) {
     checkExecutablePathDirectory(candidatePath);
+    if (protectedEditName(candidatePath)) {
+      fail('HOST_PATH_WRITE_PROTECTED', 'path is a protected project or configuration file, and Fleet\'s file tools never write it.');
+    }
     for (const pattern of WRITE_EXCLUDED_PATH_PATTERNS) {
       if (pattern.test(candidatePath)) {
         fail('HOST_PATH_WRITE_PROTECTED', 'path is a protected file, such as version control, CI, editor, package or build settings or a startup file, and Fleet\'s file tools never write it.');

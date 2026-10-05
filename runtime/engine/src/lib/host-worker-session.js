@@ -106,7 +106,7 @@ function untrustedProjectOverride(workspaceRoot) {
 // Codex features that act outside Codex's sandbox: connectors to the person's
 // accounts, plugins and their MCP servers, hooks, browser or computer control,
 // and image generation, which runs on the provider. A Standard Codex worker
-// runs without them in every Agent API mode, and without web search
+// runs without them, and without web search
 // (web_search="disabled" in codexOverrides), which reaches the network that
 // its sandbox turns off.
 const STANDARD_CODEX_FEATURES_OFF = Object.freeze(['apps', 'plugins', 'remote_plugin', 'plugin_sharing', 'hooks',
@@ -121,19 +121,17 @@ const CODEX_NO_NATIVE_SUBAGENTS = Object.freeze(['-c', 'agents.max_depth=0']);
 // Codex starts MCP servers with a minimal environment. Fleet's server needs the
 // runtime directory that holds its private tree socket.
 const CODEX_FLEET_SERVER_ENV_VARS = Object.freeze(['XDG_RUNTIME_DIR']);
-function codexOverrides(entry, apiMode, workspaceRoot) {
+function codexOverrides(entry, workspaceRoot) {
   const key = `mcp_servers.${SERVER_NAME}`;
   const args = ['-c', `${key}.command=${JSON.stringify(entry.command)}`,
     '-c', `${key}.args=${JSON.stringify(entry.args)}`,
     ...Object.entries(entry.env).flatMap(([name, value]) => ['-c', `${key}.env.${name}=${JSON.stringify(value)}`]),
     '-c', `${key}.env_vars=${JSON.stringify(CODEX_FLEET_SERVER_ENV_VARS)}`,
-    '-c', `${key}.tool_timeout_sec=900`, '-c', apiMode === 'Disabled' ? `${key}.enabled=false` : `${key}.required=true`];
+    '-c', `${key}.tool_timeout_sec=900`, '-c', `${key}.required=true`];
   args.push(...CODEX_NO_NATIVE_SUBAGENTS, '-c', 'web_search="disabled"');
-  if (apiMode === 'Only') {
-    args.push(...require('./agent-session-confinement').CODEX_API_ONLY_DISABLED_FEATURES.flatMap(name => ['-c', `features.${name}=false`]),
-      '-c', 'features.code_mode_host=true', '-c', 'features.skip_host_skill_discovery=true');
-  }
-  const off = new Set(apiMode === 'Only' ? require('./agent-session-confinement').CODEX_API_ONLY_DISABLED_FEATURES : []);
+  args.push(...require('./agent-session-confinement').CODEX_API_ONLY_DISABLED_FEATURES.flatMap(name => ['-c', `features.${name}=false`]),
+    '-c', 'features.code_mode_host=true', '-c', 'features.skip_host_skill_discovery=true');
+  const off = new Set(require('./agent-session-confinement').CODEX_API_ONLY_DISABLED_FEATURES);
   args.push(...STANDARD_CODEX_FEATURES_OFF.filter(name => !off.has(name)).flatMap(name => ['-c', `features.${name}=false`]));
   // Standard sets approvals to "never", so nobody could answer Codex asking to
   // approve a destructive Fleet tool; Fleet's server enforces its own gates
@@ -146,14 +144,8 @@ function codexOverrides(entry, apiMode, workspaceRoot) {
     '-c', 'sandbox_workspace_write.writable_roots=[]', '-c', 'sandbox_workspace_write.network_access=false',
     '-c', 'sandbox_workspace_write.exclude_slash_tmp=true', '-c', 'sandbox_workspace_write.exclude_tmpdir_env_var=true',
     '-c', untrustedProjectOverride(workspaceRoot), '-c', `${key}.default_tools_approval_mode="approve"`);
-  // The CLI keeps the person's sign-in variables; commands its shell runs get
-  // only Codex's core variables (home, user, shell, path and temporary
-  // folder), with its KEY, SECRET and TOKEN name exclusions applied as well.
-  args.push(...CODEX_SHELL_ENVIRONMENT);
   return args;
 }
-const CODEX_SHELL_ENVIRONMENT = Object.freeze(['-c', 'shell_environment_policy.inherit="core"',
-  '-c', 'shell_environment_policy.ignore_default_excludes=false']);
 
 // A TOML basic string for a -c override. JSON escapes are valid TOML except a
 // raw DEL, which TOML forbids, and lone surrogates, which TOML cannot hold.
@@ -229,8 +221,8 @@ function catalogModels(catalog) {
 // catalog given that way is not refreshed from the network.
 //
 // So Fleet asks Codex for its catalog, writes a copy for this subagent with
-// multi_agent_version removed from every model (every mode) and
-// apply_patch_tool_type null for every model (Only mode, where a Codex subagent
+// multi_agent_version removed from every model and
+// apply_patch_tool_type null for every model (where a Codex subagent
 // edits files only through Fleet's host tools, which refuse protected paths),
 // points Codex at the copy, and lists the catalog again. Nothing starts unless
 // that listing has the fields off for every model and names the requested
@@ -241,24 +233,22 @@ function catalogModels(catalog) {
 // sent to the model (directly and inside code mode), a call to it is refused as
 // unsupported, spawn_agent is refused as unsupported, and a ChatGPT-style
 // sign-in no longer refreshes the model list.
-function confineCodexModelCatalog({ list, args, env, cwd, command, apiMode, model, file, root }) {
+function confineCodexModelCatalog({ list, args, env, cwd, command, model, file, root }) {
   const unverified = () => refusal('HOST_WORKER_TOOL_POLICY_UNVERIFIED',
-    'Codex did not list its model catalog, so Fleet could not confirm a Codex subagent runs without Codex\'s own '
-    + (apiMode === 'Only' ? 'file-editing and subagent tools' : 'subagent tools') + '. Nothing was started. Update Codex, then start a new session.');
+    'Codex did not list its model catalog, so Fleet could not confirm a subagent runs without its own file-editing and subagent tools. Nothing was started. Update Codex, then start a new session.');
   const models = catalogModels(list({ args, env, cwd, command }));
   if (!models) throw unverified();
   const confined = models.map(entry => {
     const { multi_agent_version: ignored, ...copy } = entry;
-    return apiMode === 'Only' ? { ...copy, apply_patch_tool_type: null } : copy;
+    return { ...copy, apply_patch_tool_type: null };
   });
   writePrivate(file, `${JSON.stringify({ models: confined })}\n`, root);
   const override = ['-c', `model_catalog_json=${tomlString(file)}`];
   const listed = catalogModels(list({ args: [...args, ...override], env, cwd, command }));
   if (!listed || listed.length !== confined.length) throw unverified();
-  const wide = listed.filter(entry => entry.multi_agent_version != null
-    || (apiMode === 'Only' && entry.apply_patch_tool_type != null)).map(entry => entry.slug);
+  const wide = listed.filter(entry => entry.multi_agent_version != null || entry.apply_patch_tool_type != null).map(entry => entry.slug);
   if (wide.length) {
-    throw refusal('HOST_WORKER_TOOL_POLICY_WIDE', `Codex kept its own ${apiMode === 'Only' ? 'file-editing or subagent' : 'subagent'} tools for `
+    throw refusal('HOST_WORKER_TOOL_POLICY_WIDE', `Codex kept its own file-editing or subagent tools for `
       + `${wide.slice(0, 4).map(slug => JSON.stringify(slug.slice(0, 64))).join(', ')}, so nothing was started.`);
   }
   if (model && !listed.some(entry => entry.slug === model)) {
@@ -348,6 +338,7 @@ function createHostWorkerLauncher({ env = process.env, config, workspaceRoot, so
   checkCli = file => launchPolicy.assertAgentCliPath(file, { env, workspace: workspaceRoot }),
 } = {}) {
   requireEnabled(config, env);
+  try { require('./stale-generated-settings').sweep(config.stateRoot); } catch { /* best-effort cleanup */ }
   // Each CLI is found once, when this tree's launcher is made, from PATH with
   // every folder a subagent can write skipped, and that absolute path is the
   // only program launched afterwards. A program a subagent plants later on
@@ -363,14 +354,15 @@ function createHostWorkerLauncher({ env = process.env, config, workspaceRoot, so
     if (file) checkCli(file);
     return file;
   };
-  for (const name of ['codex', 'claude']) { try { pinnedCli(name); } catch { /* checked again at start */ } }
+  const { PROVIDER_ORDER } = require('./openshell-worker-providers');
+  for (const name of PROVIDER_ORDER) { try { pinnedCli(name); } catch { /* checked again at start */ } }
   async function start(spec) {
     requireEnabled(config, env);
-    if (!['codex', 'claude'].includes(spec.provider)) throw refusal('HOST_WORKER_PROVIDER_UNSUPPORTED', 'Host workers use Codex or Claude Code.');
+    if (!PROVIDER_ORDER.includes(spec.provider)) throw refusal('HOST_WORKER_PROVIDER_UNSUPPORTED', 'Choose a listed worker provider.');
     checkNative();
-    const apiMode = typeof agentApiMode === 'function' ? agentApiMode() : agentApiMode;
-    if (!MODES.includes(apiMode)) throw refusal('AGENT_API_MODE_UNAVAILABLE', 'The saved Agent API mode is unavailable.');
-    if (apiMode === 'Optimized' && spec.provider !== 'claude') throw refusal('AGENT_OPTIMIZED_TOOLS_UNSUPPORTED', 'Optimized Agent API mode supports Claude only.');
+    const savedApiMode = typeof agentApiMode === 'function' ? agentApiMode() : agentApiMode;
+    if (!MODES.includes(savedApiMode)) throw refusal('AGENT_API_MODE_UNAVAILABLE', 'The saved Agent API mode is unavailable.');
+    const apiMode = 'Only';
     const command = pinnedCli(spec.provider);
     // The person's standing rules travel outside the task text: Claude's
     // system prompt or Codex's developer instructions (see below).
@@ -408,11 +400,11 @@ function createHostWorkerLauncher({ env = process.env, config, workspaceRoot, so
           throw refusal('HOST_WORKER_POLICY_WIDE', 'Codex enabled or could not verify a project-local configuration layer.');
         }
       };
-      const overrides = codexOverrides(entry, apiMode, workspaceRoot);
+      const overrides = codexOverrides(entry, workspaceRoot);
       const mcpOff = confineCodexMcpServers({ list: listCodexMcp, args: overrides, env: common.env,
-        cwd: workspaceRoot, fleetEnabled: apiMode !== 'Disabled', command });
+        cwd: workspaceRoot, fleetEnabled: true, command });
       const catalog = confineCodexModelCatalog({ list: listCodexModels, args: [...overrides, ...mcpOff], env: common.env,
-        cwd: workspaceRoot, command, apiMode, model: spec.model || null, file: path.join(spec.nodeFolder, 'codex-models.json'),
+        cwd: workspaceRoot, command, model: spec.model || null, file: path.join(spec.nodeFolder, 'codex-models.json'),
         root: config.stateRoot });
       // Codex's documented developer_instructions: a developer message of its
       // own, which the parent's task text cannot write. Set for the app-server
@@ -469,25 +461,20 @@ function createHostWorkerLauncher({ env = process.env, config, workspaceRoot, so
       return Object.freeze({ ...session, apiMode, standingRulesDelivered: Boolean(standingRules) && !spec.threadId });
     }
     const mcpConfig = path.join(spec.nodeFolder, 'mcp.json');
-    writePrivate(mcpConfig, JSON.stringify({ mcpServers: apiMode === 'Disabled' ? {} : { [SERVER_NAME]: { type: 'stdio', ...entry } } }) + '\n', config.stateRoot);
+    writePrivate(mcpConfig, JSON.stringify({ mcpServers: { [SERVER_NAME]: { type: 'stdio', ...entry } } }) + '\n', config.stateRoot);
     if (workspaceRoot !== config.workspace || fs.realpathSync(workspaceRoot) !== workspaceRoot) {
       throw refusal('HOST_WORKSPACE_SYMLINK_REFUSED', 'The sealed Standard workspace changed before Claude started.');
     }
     const settings = path.join(spec.nodeFolder, 'settings.json');
-    // The person's own sign-in settings (see claudeAuthLaunch): sign-in commands
-    // ride in this file, secret values only in the child's environment.
-    const signIn = launchPolicy.claudeAuthLaunch(common.env, { workspace: workspaceRoot });
-    if (signIn.note) process.stderr.write(`[toolsenabled] Fleet did not use part of your Claude sign-in settings: ${signIn.note}.\n`);
     writePrivate(settings,
-      JSON.stringify({ ...require('./claude-workspace-file-tools').settings(SERVER_NAME,
-        { serverEnabled: apiMode !== 'Disabled', workspaceRoot, pathDirectories: String(env.PATH || '').split(path.delimiter) }),
-      ...signIn.settings }) + '\n', config.stateRoot);
-    const options = { ...common, env: signIn.env, onEvent: claudeEvents(spec.onEvent, { workspaceRoot }),
+      JSON.stringify(require('./claude-workspace-file-tools').settings(SERVER_NAME,
+        { workspaceRoot, pathDirectories: String(env.PATH || '').split(path.delimiter) })) + '\n', config.stateRoot);
+    const options = { ...common, onEvent: claudeEvents(spec.onEvent, { workspaceRoot }),
       threadOptions: { ...(spec.model ? { model: spec.model } : {}), ...(spec.effort ? { effort: spec.effort } : {}) },
       // Standard replaces saved permission sources with exact workspace file rules.
       plan: { mcpConfig, settings,
         claudePermissionMode: 'dontAsk',
-        agentApiMode: apiMode === 'Disabled' ? 'Enabled' : apiMode,
+        agentApiMode: apiMode,
         roleFunctionsOnly: true, preserveSettingsSources: false,
         workspaceFileTools: true,
         ...(standingRules ? { standingRules } : {}) } };

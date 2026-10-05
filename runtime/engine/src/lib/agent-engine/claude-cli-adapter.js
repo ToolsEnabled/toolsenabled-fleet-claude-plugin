@@ -1,12 +1,9 @@
 'use strict';
 
-/* THE claude CLI, BEHIND THE SAME SEAM CODEX SITS BEHIND.
+/* THE claude CLI, BEHIND THE SAME ADAPTER SEAM AS OTHER PROVIDERS.
  *
- * This adapter starts the person's own `claude` CLI. Nothing here reads,
- * copies, stores or forwards a credential: `claude` signs in by itself,
- * exactly as it does when the person runs it in their own terminal. There is
- * no config directory override anywhere in this file, so the child uses the
- * person's own sign-in.
+ * This adapter maps the CLI protocol and builds its launch arguments. The
+ * launch transport owns the environment and sign-in boundary.
  *
  * The mappings below follow the stream claude 2.1.186 emits. It is
  * newline-delimited JSON with these shapes:
@@ -62,13 +59,8 @@ const { createEventBackpressure, isThenable } = require('./event-backpressure');
  * block beside the words, in the shape the provider already defines for
  * base64 image input.
  *
- * The read itself is in its own module, and deliberately so.
- * tests/agent-engine/claude-cli-process.test.js asserts against this file's
- * SOURCE TEXT that it names no file-reading call and no credential store --
- * "The child authenticates itself" -- and that gate is right, is untouched,
- * and is the reason this comment does not spell those names either. See
- * turn-image-bytes.js for the magic-byte check that makes it impossible for
- * anything that is not a picture to come back from it. */
+ * The image read is in its own module. See turn-image-bytes.js for the
+ * magic-byte check that rejects input that is not a picture. */
 const { readTurnImage, imageMimeTypeFor } = require('./turn-image-bytes');
 
 class ClaudeCliError extends Error {
@@ -251,24 +243,13 @@ function claudeServerPermissionRule(serverName) {
   return `mcp__${serverName}`;
 }
 
-/* Native-tool flags are separate from the MCP server configuration and its
- * permission grants. Only removes the native action tools; Enabled and
- * Disabled leave native availability to the role and permission level.
- * Legacy booleans retain their meaning: true is Only, false is Enabled. */
-function agentApiToolArgs(agentApi) {
-  if (agentApi === false) return [];
-  const { agentApiArgs } = require('../agent-api-policy');
-  return typeof agentApi === 'string' ? agentApiArgs({ mode: agentApi })
-    : agentApiArgs({ enabled: agentApi === true ? true : null });
-}
-
 function selectedAgentApiMode(agentApi, roleFunctionsOnly = false) {
   const policy = require('../agent-api-policy');
   const mode = agentApi === null
     ? roleFunctionsOnly === true ? 'Only' : policy.agentApiMode()
     : policy.normalizeAgentApiMode(agentApi);
   if (!mode) throw new ClaudeCliError('CLAUDE_API_MODE_INVALID', 'Unknown agent API mode.');
-  return mode;
+  return 'Only';
 }
 
 /* The flags every session gets, whichever way the conversation begins. The
@@ -287,7 +268,7 @@ function baseClaudeArgs({ threadOptions = {}, permissionMode = null, mcpConfig =
     throw new ClaudeCliError('CLAUDE_CLI_PLAN_INVALID', 'The saved-settings preservation choice must be a boolean.');
   }
   const apiMode = selectedAgentApiMode(agentApi, roleFunctionsOnly);
-  roleFunctionsOnly = roleFunctionsOnly || apiMode === 'Only';
+  roleFunctionsOnly = roleFunctionsOnly || apiMode === 'Only' || apiMode === 'Optimized';
   if (typeof workspaceFileTools !== 'boolean' || workspaceFileTools
       && (!roleFunctionsOnly || preserveSettingsSources || permissionMode !== 'dontAsk' || !settings || !mcpConfig)) {
     throw new ClaudeCliError('CLAUDE_WORKSPACE_TOOLS_INVALID',
@@ -334,15 +315,11 @@ function baseClaudeArgs({ threadOptions = {}, permissionMode = null, mcpConfig =
     '--permission-mode', mode,
     ...(model ? ['--model', model] : []),
     ...(effort ? ['--effort', effort] : []),
-    ...(apiMode === 'Disabled'
-      ? ['--mcp-config', '{"mcpServers":{}}', '--strict-mcp-config']
-      : mcpConfigArgs(mcpConfig)),
+    ...mcpConfigArgs(mcpConfig),
     ...settingsArgs(settings),
-    ...(roleFunctionsOnly
-      ? ['--tools', workspaceFileTools ? require('../claude-workspace-file-tools').NATIVE_TOOLS : '',
-        ...(workspaceFileTools ? ['--restricted'] : []),
-        ...(!preserveSettingsSources ? ['--setting-sources', ''] : []), '--disable-slash-commands']
-      : agentApiToolArgs(apiMode)),
+    '--tools', workspaceFileTools ? require('../claude-workspace-file-tools').NATIVE_TOOLS : '',
+    ...(workspaceFileTools ? ['--restricted'] : []),
+    ...(!preserveSettingsSources ? ['--setting-sources', ''] : []), '--disable-slash-commands',
     ...systemPromptArgs({ appendSystemPrompt, systemPromptSnapshot }),
     ...extraArgs
   ];
@@ -368,7 +345,7 @@ function baseClaudeArgs({ threadOptions = {}, permissionMode = null, mcpConfig =
  */
 function claudeArgs({ threadId, threadOptions = {}, permissionMode = null, mcpConfig = null, settings = null, agentApi = null, roleFunctionsOnly = false, preserveSettingsSources = false, workspaceFileTools = false, appendSystemPrompt = null, systemPromptSnapshot = null, extraArgs = [] }) {
   const apiMode = selectedAgentApiMode(agentApi, roleFunctionsOnly);
-  if (extraArgs.length && (roleFunctionsOnly || apiMode !== 'Enabled')) {
+  if (extraArgs.length) {
     throw new ClaudeCliError('CLAUDE_ROLE_TOOLS_INVALID', 'The selected tool restrictions cannot be overridden by extra CLI arguments.');
   }
   return [
@@ -389,7 +366,7 @@ function claudeArgs({ threadId, threadOptions = {}, permissionMode = null, mcpCo
  * vanish between turns of one conversation. */
 function claudeResumeArgs({ threadId, threadOptions = {}, permissionMode = null, mcpConfig = null, settings = null, agentApi = null, roleFunctionsOnly = false, preserveSettingsSources = false, workspaceFileTools = false, appendSystemPrompt = null, systemPromptSnapshot = null, extraArgs = [] }) {
   const apiMode = selectedAgentApiMode(agentApi, roleFunctionsOnly);
-  if (extraArgs.length && (roleFunctionsOnly || apiMode !== 'Enabled')) {
+  if (extraArgs.length) {
     throw new ClaudeCliError('CLAUDE_ROLE_TOOLS_INVALID', 'The selected tool restrictions cannot be overridden by extra CLI arguments.');
   }
   return [

@@ -50,7 +50,7 @@ const SETTINGS_USAGE = [
   '/tefleet settings width <1-64> - subagents each agent may have running at once',
   '/tefleet settings providers <CLI ...|all> - agent CLIs subagents may use: claude, codex',
   '/tefleet settings models <model ...|all> - models subagents may use',
-  '/tefleet settings mode <Only|Optimized|Enabled|Disabled> - the Agent API mode for new subagents',
+  '/tefleet settings mode <Only|Optimized|Enabled|Disabled> - the Agent API mode, kept for earlier choices: every mode gives subagents the same tools',
   '/tefleet settings audit <on|off> - signed audit of Fleet operations',
   'Several changes can go in one command, for example /tefleet settings depth 2 width 3.',
   CONFIRM_LINE,
@@ -91,7 +91,7 @@ function quoted(value, max = 300) {
 // reads when it fails, such as "Fleet's ledger did not change".
 function command(argv, failure, retried = false) {
   const { spawnSync } = require('node:child_process');
-  const result = spawnSync(process.execPath, argv, { env: process.env, encoding: 'utf8', timeout: 80000, maxBuffer: 4 * 1024 * 1024 });
+  const result = spawnSync(process.execPath, argv, { env: require('./runtime-config').childEnvironment(), encoding: 'utf8', timeout: 80000, maxBuffer: 4 * 1024 * 1024 });
   if (result.status === 0) return { ok: true, text: String(result.stdout).trim() };
   const detail = String(result.stderr || result.error?.message || 'Fleet did not answer.').trim();
   // Right after a plugin update, bind the saved setup to this version first.

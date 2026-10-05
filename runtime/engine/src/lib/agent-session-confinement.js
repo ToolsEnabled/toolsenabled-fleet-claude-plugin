@@ -4,8 +4,7 @@
 // back to FAIL_CLOSED_TIER when the machine record is absent or cannot be
 // trusted; src/lib/host-worker-session.js turns off
 // CODEX_API_ONLY_DISABLED_FEATURES for a Codex subagent in the Only agent API
-// mode. Nothing here reads, links or copies a provider sign-in, and nothing
-// here chooses a sandbox or a permission mode.
+// mode. This module does not choose a sandbox or a permission mode.
 
 // The level a session runs at when the recorded one cannot be honoured.
 //

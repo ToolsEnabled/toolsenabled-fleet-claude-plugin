@@ -32,91 +32,7 @@ function outsideWriteDenial(files, workspaceRoot, label = 'Fleet') {
 }
 const FILE_ALLOW = Object.freeze(['Read(./**)', 'Edit(./**)']);
 
-// Paths no Claude worker may change, at any depth below the workspace. This
-// list is a superset of the write anchors Fleet's own host file tools refuse
-// (src/lib/providers/host-control.js WRITE_EXCLUDED_PATH_PATTERNS and the
-// shell and login files in EXCLUDED_PATH_PATTERNS) and of Claude Code's own
-// protected paths (https://code.claude.com/docs/en/permission-modes, "Protected
-// paths"). Every pattern starts with **/ so a nested copy (a vendored repo's
-// sub/.github/workflows, sub/package.json) matches as well as the top-level one.
-const PROTECTED_EDIT_PATTERNS = Object.freeze([
-  // Version control, including a .git file that points at another git folder.
-  '.git', '.git/**', '.hg/**', '.svn/**', '.bzr/**', '.pijul/**', '.fossil-settings/**',
-  '*.git/hooks/**', '*.git/config', '.gitconfig', '.gitmodules', '.config/git/**',
-  // Editors, dev containers and CI.
-  '.vscode/**', '.idea/**', '.zed/**', '.cursor/**', '.windsurf/**', '.devcontainer/**', '.devcontainer.json',
-  '.github/workflows/**', '.github/actions/**', '.circleci/**', '.gitlab-ci.yml', '.gitlab-ci.yaml',
-  // Hooks and task runners.
-  '.husky/**', '.githooks/**', 'lefthook*.yml', 'lefthook*.yaml', '.lefthook.yml', '.lefthook.yaml',
-  '.pre-commit-config.yml', '.pre-commit-config.yaml',
-  'package.json', 'GNUmakefile', 'Makefile', 'makefile', 'Justfile', 'justfile', 'Taskfile', 'Taskfile.yml', 'Taskfile.yaml',
-  'Gruntfile.js', 'Gruntfile.cjs', 'Gruntfile.mjs', 'gulpfile.js', 'gulpfile.cjs', 'gulpfile.mjs',
-  'tox.ini', 'noxfile.py', 'pyproject.toml', 'Procfile', 'Dockerfile', 'compose.yml', 'compose.yaml',
-  // Package managers and toolchains that load project files as code or config.
-  '.npmrc', '.yarnrc*', '.yarn/**', '.pnp.cjs', '.pnp.loader.mjs', '.pnpmfile.cjs', 'bunfig.toml', '.bunfig.toml',
-  '.cargo/**', '.mvn/**', 'maven-wrapper.properties', 'gradle-wrapper.properties',
-  '.bazelrc', '.bazelversion', '.bazeliskrc', 'mise.toml', '.mise.toml', '.ripgreprc', 'pyrightconfig.json',
-  // Programs on PATH or loaded at interpreter start.
-  'node_modules/.bin/**', '.venv/bin/**', 'venv/bin/**', 'env/bin/**', '.local/bin/**',
-  'site-packages/*.pth', 'sitecustomize.py', 'conftest.py',
-  // Shell and login files.
-  '.envrc', '.bashrc', '.bash_profile', '.bash_login', '.bash_aliases', '.bash_logout', '.profile',
-  '.zshrc', '.zshenv', '.zprofile', '.zlogin', '.zlogout', '.kshrc', '.cshrc', '.tcshrc', '.inputrc',
-  '.xprofile', '.xinitrc', '.pam_environment',
-  // Agent configuration and the instruction files the next agent session reads.
-  '.claude/**', '.claude.json', '.codex/**', '.gemini/**', '.mcp.json',
-  'CLAUDE.md', 'CLAUDE.local.md', 'AGENTS.md', 'AGENTS.override.md', 'GEMINI.md',
-  '.cursorrules', '.cursorrules/**', '.windsurfrules', '.windsurfrules/**', '.clinerules', '.clinerules/**',
-  '.agents/**', '.github/copilot-instructions.md', '.github/instructions/**',
-  // Build and environment files that run code on the next build, install,
-  // `cd` (direnv, Nix) or editor start.
-  'setup.py', 'usercustomize.py', 'build.rs', 'Cargo.toml', 'build.gradle', 'build.gradle.kts',
-  'settings.gradle', 'settings.gradle.kts', 'gradle.properties', 'gradlew', 'gradlew.bat', 'buildSrc/**',
-  'mvnw', 'mvnw.cmd', 'pom.xml', 'Pipfile', 'Gemfile', '*.gemspec', 'Rakefile', 'CMakeLists.txt', 'meson.build',
-  'composer.json', 'deno.json', 'deno.jsonc', 'Vagrantfile', 'Earthfile', 'flake.nix', 'shell.nix', 'default.nix',
-  '.direnv/**', '.vimrc', '.exrc', '.nvimrc', '.nvim.lua', '.lazy.lua',
-  // Credential and tool configuration stores, several of which name programs
-  // to run (Docker credential helpers, kubeconfig exec plugins).
-  '.config/**', '.ssh/**', '.aws/**', '.gnupg/**', '.docker/**', '.kube/**', '.netrc', '.git-credentials',
-  '.pgpass', '.my.cnf', '.vault-token', '.pypirc', '.m2/settings.xml',
-]);
-// Files no Claude worker may read, at any depth below the workspace. This
-// list is a superset of what Fleet's own host file tools refuse to read
-// (src/lib/providers/host-control.js EXCLUDED_PATH_PATTERNS, the credential
-// store and credential-shaped names, and .env files), written as Claude Code
-// permission globs. Claude Code matches them case-sensitively, so they name
-// the usual spellings.
-const CREDENTIAL_DATA_EXTENSIONS = Object.freeze(['json*', 'y*ml', 'toml', 'ini', 'cfg', 'conf', 'db', 'sqlite*',
-  'env', 'pem', 'key', 'p12', 'pfx']);
-// Stems refused only as the whole name or before a separator, so an ordinary
-// tokenizer.json or authors.yml stays readable.
-const CREDENTIAL_EXACT_STEMS = Object.freeze(['auth', 'token', 'tokens']);
-// Stems refused anywhere in a name with a data or key extension.
-const CREDENTIAL_STEMS = Object.freeze(['cookie', 'credential', 'session', 'passw', 'passphrase', 'keystore', 'kdbx', 'wallet',
-  ...['access', 'refresh', 'bearer'].flatMap(kind => ['key', 'token'].flatMap(item => [`${kind}[._-]${item}`, `${kind}${item}`])),
-  'private[._-]key', 'privatekey', 'service[._-]account', 'serviceaccount']);
-const PROTECTED_READ_PATTERNS = Object.freeze([
-  // Version control internals, a vendored repository's included.
-  '.git/**',
-  // Environment files.
-  '.env', '.env.*',
-  // Credential, key and tool configuration stores.
-  'vault/**', '.ssh/**', '.aws/**', '.gnupg/**', '.docker/**', '.kube/**', '.azure/**', '.config/**', '.terraform.d/**',
-  '.claude/**', '.claude.json', '.codex/**', '.gemini/**', '.netrc', '.git-credentials', '.pgpass', '.my.cnf',
-  '.vault-token', '.Xauthority', 'key4.db', 'Login Data', 'login.keyring', 'kaggle.json', '.m2/settings.xml',
-  '.cargo/credentials', '.cargo/credentials.toml', '.gem/credentials', '.npmrc', '.pypirc', 'NuGet.Config',
-  'ConsoleHost_history.txt', '*_history', 'profiles/chrome/**',
-  // Private SSH keys by their usual names.
-  'id_rsa', 'id_dsa', 'id_ecdsa', 'id_ed25519', 'id_ecdsa_sk', 'id_ed25519_sk',
-  // Shell and login files, which commonly export keys.
-  '.bashrc', '.bash_profile', '.bash_login', '.profile', '.zshrc', '.zshenv', '.zprofile', '.zlogin', '.kshrc', '.cshrc',
-  '.tcshrc', '.inputrc', '.xprofile', '.xinitrc', '.pam_environment', '.envrc',
-  // Credential-shaped names.
-  '*credential*', '*private[._-]key*', '*privatekey*',
-  ...CREDENTIAL_EXACT_STEMS.flatMap(stem => CREDENTIAL_DATA_EXTENSIONS.flatMap(extension =>
-    [`${stem}.${extension}`, `.${stem}.${extension}`, `${stem}[._-]*.${extension}`, `.${stem}[._-]*.${extension}`])),
-  ...CREDENTIAL_STEMS.flatMap(stem => CREDENTIAL_DATA_EXTENSIONS.map(extension => `*${stem}*.${extension}`)),
-]);
+const { PROTECTED_EDIT_PATTERNS, PROTECTED_READ_PATTERNS } = require('./protected-names');
 const FILE_DENY = Object.freeze([
   'Read(.env)', 'Read(.env.*)', 'Read(.git/**)', 'Read(.claude/**)',
   'Read(.codex/**)', 'Read(.ssh/**)', 'Read(.aws/**)',
@@ -131,6 +47,7 @@ const FILE_DENY = Object.freeze([
   'Edit(.gitconfig)', 'Edit(.pre-commit-config.yaml)',
   ...PROTECTED_EDIT_PATTERNS.map(pattern => `Edit(**/${pattern})`),
   ...PROTECTED_READ_PATTERNS.map(pattern => `Read(**/${pattern})`),
+  ...PROTECTED_READ_PATTERNS.map(pattern => `Edit(**/${pattern})`),
 ]);
 
 // A gitignore pattern that names exactly this absolute path. Claude Code reads

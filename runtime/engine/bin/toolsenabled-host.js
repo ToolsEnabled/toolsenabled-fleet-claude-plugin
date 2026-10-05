@@ -29,7 +29,7 @@ function parseArgs(argv) {
     else if (arg.startsWith('--')) throw new Error(`Unknown option ${arg}.`);
     else result.args.push(arg);
   }
-  if (result.actor && !['codex', 'claude'].includes(result.actor)) throw new Error('--actor must be codex or claude.');
+  if (result.actor && !require('../src/lib/openshell-worker-providers').isProviderId(result.actor)) throw new Error('--actor must be a provider id.');
   const paged = ['offset', 'limit', 'revision', 'kinds'].some(key => result[key] !== undefined);
   if ((paged && (!['ledger', 'settings'].includes(result.args[0]) || !(result.json || result.text)))
       || (result.kinds !== undefined && result.args[0] !== 'ledger')
