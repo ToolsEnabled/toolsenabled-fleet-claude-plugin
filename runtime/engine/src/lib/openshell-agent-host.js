@@ -118,15 +118,11 @@ const CLOSE_GRACE_MS = 4000;
 const TIER_CLASSES = Object.freeze(['cheap', 'standard', 'premium']);
 const { PROVIDER_ORDER: WORKER_PROVIDERS } = require('./openshell-worker-providers');
 // A provider change keeps the slot's tier class: these are each provider's rows for it.
-const PROVIDER_CLASS_TIERS = Object.freeze({
-  codex: Object.freeze({ cheap: 'luna', standard: 'terra', premium: 'sol' }),
-  claude: Object.freeze({ cheap: 'claude-fable', standard: 'claude-sonnet', premium: 'claude-opus' }),
-});
+const PROVIDER_CLASS_TIERS = Object.freeze(Object.fromEntries(
+  require('./subagent-clis').SUBAGENT_CLIS.map(row => [row.id, row.classes])));
 // What each CLI accepts for effort (tool-registry.js AGENT_SPAWN_EFFORT_BY_PROVIDER).
-const PROVIDER_EFFORTS = Object.freeze({
-  codex: Object.freeze(['low', 'medium', 'high', 'xhigh', 'max', 'ultra']),
-  claude: Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']),
-});
+const PROVIDER_EFFORTS = Object.freeze(Object.fromEntries(
+  require('./subagent-clis').SUBAGENT_CLIS.map(row => [row.id, row.efforts])));
 
 function refusal(code, message, details) {
   return Object.assign(new Error(message), { code, ...(details ? { details } : {}) });

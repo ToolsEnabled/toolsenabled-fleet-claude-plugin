@@ -28,7 +28,8 @@ const PROTECTED_EDIT_PATTERNS = Object.freeze([
   '.zshrc', '.zshenv', '.zprofile', '.zlogin', '.zlogout', '.kshrc', '.cshrc', '.tcshrc', '.inputrc',
   '.xprofile', '.xinitrc', '.pam_environment',
   // Agent configuration and the instruction files the next agent session reads.
-  '.claude/**', '.claude.json', '.codex/**', '.gemini/**', '.mcp.json',
+  '.claude/**', '.claude.json', '.codex/**', '.gemini/**', '.grok/**', '.opencode/**',
+  '.local/share/opencode/**', '.config/opencode/**', 'opencode.json*', '.mcp.json',
   'CLAUDE.md', 'CLAUDE.local.md', 'AGENTS.md', 'AGENTS.override.md', 'GEMINI.md',
   '.cursorrules', '.cursorrules/**', '.windsurfrules', '.windsurfrules/**', '.clinerules', '.clinerules/**',
   '.agents/**', '.github/copilot-instructions.md', '.github/instructions/**',
@@ -64,7 +65,9 @@ const PROTECTED_READ_PATTERNS = Object.freeze([
   '.env', '.env.*',
   // Credential, key and tool configuration stores.
   'vault/**', '.ssh/**', '.aws/**', '.gnupg/**', '.docker/**', '.kube/**', '.azure/**', '.config/**', '.terraform.d/**',
-  '.claude/**', '.claude.json', '.codex/**', '.gemini/**', '.netrc', '.git-credentials', '.pgpass', '.my.cnf',
+  '.claude/**', '.claude.json', '.codex/**', '.gemini/**', '.grok/**', '.opencode/**',
+  '.local/share/opencode/**', '.config/opencode/**', 'opencode.json*',
+  '.netrc', '.git-credentials', '.pgpass', '.my.cnf',
   '.vault-token', '.Xauthority', 'key4.db', 'Login Data', 'login.keyring', 'kaggle.json', '.m2/settings.xml',
   '.cargo/credentials', '.cargo/credentials.toml', '.gem/credentials', '.npmrc', '.pypirc', 'NuGet.Config',
   'ConsoleHost_history.txt', '*_history', 'profiles/chrome/**',
@@ -185,6 +188,11 @@ const EXCLUDED_PATH_PATTERNS = [
   /[\\/]\.codex([\\/]|$)/i,
   /[\\/]\.claude([\\/]|$)/i,
   /[\\/]\.gemini([\\/]|$)/i,
+  /[\\/]\.grok([\\/]|$)/i,
+  /[\\/]\.opencode([\\/]|$)/i,
+  /[\\/]\.local[\\/]share[\\/]opencode([\\/]|$)/i,
+  /[\\/]\.config[\\/]opencode([\\/]|$)/i,
+  /[\\/]opencode\.json[^\\/]*$/i,
   /[\\/]\.config([\\/]|$)/i,
   /[\\/]AppData[\\/]Roaming[\\/]gcloud([\\/]|$)/i,
   // state/ holds helper tokens and capability files; reading one is a direct

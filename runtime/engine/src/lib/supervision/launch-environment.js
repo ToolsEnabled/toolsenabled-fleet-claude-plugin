@@ -24,7 +24,8 @@ const os = require('node:os');
 const path = require('node:path');
 const envScrub = require('../env-scrub.js');
 
-const SUBSCRIPTION_PROVIDER_IDS = Object.freeze(['codex', 'claude', 'gemini', 'grok']);
+// Every provider whose sign-in variables are removed, whether or not Fleet can start its CLI.
+const SUBSCRIPTION_PROVIDER_IDS = Object.freeze(['claude', 'codex', 'gemini', 'grok', 'opencode']);
 
 // Provider sign-in and endpoint variables. Fleet never carries a provider's key,
 // token or endpoint: credentialFreeEnvironment() removes them for Fleet's own
@@ -59,6 +60,9 @@ const ENVIRONMENT_RULES = Object.freeze([
   ['GROK_API_BASE_URL', 'grok', true],
   ['GROK_CLI_CHAT_PROXY_BASE_URL', 'grok', true],
   ['GROK_AUTH_TOKEN', 'grok', true],
+  ['OPENCODE_API_KEY', 'opencode', true],
+  ['OPENCODE_AUTH_TOKEN', 'opencode', true],
+  ['OPENCODE_BASE_URL', 'opencode', true],
   ['AWS_PROFILE', 'claude', false],
   ['AWS_REGION', 'claude', false],
   ['AWS_DEFAULT_REGION', 'claude', false],

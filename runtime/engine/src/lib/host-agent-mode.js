@@ -114,7 +114,8 @@ function startHostAgentMode({ config, actor, env = process.env, listen = true,
       ready: Promise.resolve(), close: async () => {} });
   }
   const agentId = actor && ID.test(actor) ? actor : 'host-owner';
-  const root = { agentId, actor: actor || null, displayName: actor === 'claude' ? 'Claude Code' : actor === 'codex' ? 'Codex' : 'Lead' };
+  const root = { agentId, actor: actor || null,
+    displayName: require('./subagent-clis').subagentCli(actor)?.displayName || 'Lead' };
   const rootSessionId = `host-root-${crypto.randomUUID()}`;
   const name = socketName();
   if (typeof name !== 'string' || !/^[a-z0-9_-]{1,16}\.sock$/.test(name)) {

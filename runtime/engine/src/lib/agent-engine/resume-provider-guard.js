@@ -29,11 +29,8 @@
 
 /* The names a person sees. Keyed by the identifier the product stores, which is
    the lowercase one the confinement plan and the session record already use. */
-const PROVIDER_DISPLAY_NAMES = Object.freeze({
-  claude: 'Claude',
-  codex: 'Codex',
-  local: 'the local model',
-});
+const PROVIDER_DISPLAY_NAMES = Object.freeze(Object.fromEntries(
+  require('../subagent-clis').SUBAGENT_CLIS.map(row => [row.id, row.resumeName || row.displayName])));
 
 const RESUME_PROVIDER_MISMATCH = 'RESUME_PROVIDER_MISMATCH';
 const RESUME_PROVIDER_UNKNOWN = 'RESUME_PROVIDER_UNKNOWN';

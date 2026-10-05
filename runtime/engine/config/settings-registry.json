@@ -103,7 +103,7 @@
       "minimum": 0,
       "maximum": 16,
       "unit": "levels below your session",
-      "consequence": "How many levels of subagents may run below your Claude Code session, which is level zero. The default 3 allows subagents, their subagents and one level below those. 0 allows no subagents. Lowering it keeps existing subagents and their conversations; one deeper than the new limit cannot be resumed or restarted."
+      "consequence": "How many levels of subagents may run below your lead session, which is level zero. The default 3 allows subagents, their subagents and one level below those. 0 allows no subagents. Lowering it keeps existing subagents and their conversations; one deeper than the new limit cannot be resumed or restarted."
     },
     {
       "id": "fleet.max_declared_agents",

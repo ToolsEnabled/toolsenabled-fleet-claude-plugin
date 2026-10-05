@@ -96,37 +96,37 @@
       "phasePriority": []
     },
     {
-      "id": "local-node-1",
-      "displayName": "Local node 1",
+      "id": "opencode-1",
+      "displayName": "OpenCode seat 1",
       "role": "builder",
-      "provider": "local",
+      "provider": "opencode",
       "enabled": true,
       "assignedPhase": null,
       "phasePriority": []
     },
     {
-      "id": "local-node-2",
-      "displayName": "Local node 2",
+      "id": "opencode-2",
+      "displayName": "OpenCode seat 2",
       "role": "builder",
-      "provider": "local",
+      "provider": "opencode",
       "enabled": true,
       "assignedPhase": null,
       "phasePriority": []
     },
     {
-      "id": "local-node-3",
-      "displayName": "Local node 3",
+      "id": "opencode-3",
+      "displayName": "OpenCode seat 3",
       "role": "builder",
-      "provider": "local",
+      "provider": "opencode",
       "enabled": true,
       "assignedPhase": null,
       "phasePriority": []
     },
     {
-      "id": "local-node-4",
-      "displayName": "Local node 4",
+      "id": "opencode-4",
+      "displayName": "OpenCode seat 4",
       "role": "builder",
-      "provider": "local",
+      "provider": "opencode",
       "enabled": true,
       "assignedPhase": null,
       "phasePriority": []
@@ -175,22 +175,22 @@
     },
     {
       "from": "controller",
-      "to": "local-node-1",
+      "to": "opencode-1",
       "type": "manages"
     },
     {
       "from": "controller",
-      "to": "local-node-2",
+      "to": "opencode-2",
       "type": "manages"
     },
     {
       "from": "controller",
-      "to": "local-node-3",
+      "to": "opencode-3",
       "type": "manages"
     },
     {
       "from": "controller",
-      "to": "local-node-4",
+      "to": "opencode-4",
       "type": "manages"
     }
   ]

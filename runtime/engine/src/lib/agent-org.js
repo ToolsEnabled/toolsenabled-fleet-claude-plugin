@@ -69,7 +69,7 @@ const CLASSIFIERS = Object.freeze(['supervisor']);
 // Reuses the edge vocabulary already generated for the activity contracts
 // rather than inventing a second one that would drift.
 const RELATION_TYPES = Object.freeze(['manages', 'reviews', 'delegates_to', 'escalates_to']);
-const PROVIDERS = Object.freeze(['codex', 'claude', 'gemini', 'grok', 'local', 'none']);
+const PROVIDERS = Object.freeze([...require('./subagent-clis').ORG_PROVIDER_ORDER, 'none']);
 
 const AGENT_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 // Deliberately the same shape as ROLE_ID in src/lib/custom-role-store.js, which

@@ -1,4 +1,5 @@
 {
+  "opencode-auto": { "provider": "opencode", "tier": "standard", "model": "opencode/auto", "cliModel": "auto", "efforts": [] },
   "astra": {
     "provider": "codex",
     "tier": "premium",

@@ -6,7 +6,7 @@ user-invocable: false
 
 # ToolsEnabled Fleet
 
-Start subagents only when the person asks for them, for example "start two subagents" or "have another agent review this in parallel". Each subagent is a separate agent CLI (Claude Code or Codex) that Fleet starts on this computer under the person's own sign-in, so do not start one on your own initiative, and start no more than the request needs: one per independent piece of work, usually one to three. The person's depth and width settings are upper limits, not targets.
+Start subagents only when the person asks for them, for example "start two subagents" or "have another agent review this in parallel". Each subagent is a separate agent CLI (Claude Code, Codex or OpenCode) that Fleet starts on this computer under the person's own sign-in, so do not start one on your own initiative, and start no more than the request needs: one per independent piece of work, usually one to three. The person's depth and width settings are upper limits, not targets.
 
 Use Fleet's `agent.spawn` tool to give a subagent a concrete task, role, expected result and reporting instruction, and quote the person's request in the contract's `because` line. Choose its `tier` from the list `agent.spawn` gives; it holds only the tiers of the agent CLIs that setup turned on for this project. In the contract's `report` field, use a path under `.fleet/reports/`, for example `report .fleet/reports/login-review.md`, so reports stay out of the project root. Use `agent_comms.send_local` to message your subagents, and `agent.stop` when the person asks to stop a subagent or the task has ended.
 

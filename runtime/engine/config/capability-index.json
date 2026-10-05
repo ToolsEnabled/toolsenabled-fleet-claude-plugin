@@ -1529,7 +1529,7 @@
  {"action":"read","clause":"List shared tasks, without their payloads, results, checkpoints, errors or claim tokens.","destructive":false,"effect":"local-read","ext":false,"id":"task.list","len":{"alias":70,"body":120,"identity":10,"title":22},"ns":"task","params":[{"desc":"Optional queue filter.","name":"queue","required":false},{"desc":"Optional task-type filter.","name":"type","required":false},{"desc":"Reported task status: an expired leased claim reports expired, and an ","name":"status","required":false},{"desc":"Match any listed reported status, including lease expiry, before order","name":"statuses","required":false},{"desc":"Maximum metadata rows from 1 through 100.","name":"limit","required":false}],"provider":null,"ro":true,"summary":"List shared tasks, without their payloads, results, checkpoints, errors or claim tokens."}
 ],
 "engine":{
- "commit":"3fcac8a7c2b3876204dce2cdae68885ffd966534",
+ "commit":"830e295e83325fc4829d3d47f72150707c7f2d9f",
  "toolCount":44,
  "withPacks":false
 },

@@ -17,6 +17,12 @@ const SUBAGENT_CLIS = Object.freeze({
   codex: Object.freeze({ status: Object.freeze(['login', 'status']), signIn: 'codex login',
     sandbox: Object.freeze({ args: workspace => ['sandbox', '-P', ':workspace', '-C', workspace, '/bin/true'],
       help: 'https://developers.openai.com/codex/concepts/sandboxing#prerequisites' }) }),
+  // A CLI that speaks the Agent Client Protocol is checked by starting it the way a subagent starts
+  // it and asking the protocol's initialize request, which needs no sign-in and makes no model call.
+  // Its own listing says how many logins it has saved; with none, its hosted models may refuse a
+  // subagent, which setup says without turning the CLI off (a provider can also be configured without one).
+  opencode: Object.freeze({ acp: Object.freeze(['acp', '--pure']), signIn: 'opencode auth login',
+    logins: Object.freeze({ args: Object.freeze(['providers', 'list']), none: /(?:^|\s)0 credentials?\b/ }) }),
 });
 // Only a sandbox that reports it could not start turns a CLI off. A usage error
 // (another CLI version), a timeout or any other failure leaves the CLI on.
@@ -151,6 +157,29 @@ function checkProject(workspace, options) {
   if (refusal) throw new Error(refusal);
   return workspace;
 }
+// Starts an ACP CLI the way a subagent starts it and asks the protocol's initialize request. True only
+// when the CLI answers with a protocol version; nothing is sent to a model.
+const ACP_PROBE = `
+const { spawn } = require('node:child_process');
+const [file, ...args] = process.argv.slice(1);
+const child = spawn(file, args, { stdio: ['pipe', 'pipe', 'ignore'], cwd: process.cwd() });
+let text = '';
+const done = ok => { try { child.kill('SIGTERM'); } catch {} process.exit(ok ? 0 : 1); };
+child.on('error', () => done(false));
+child.on('exit', () => done(false));
+child.stdout.on('data', chunk => {
+  text += chunk;
+  for (const line of text.split('\\n')) {
+    try { const message = JSON.parse(line); if (message.id === 1) done(Number.isInteger(message.result && message.result.protocolVersion)); } catch {}
+  }
+});
+child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: 1, clientCapabilities: {}, clientInfo: { name: 'fleet', version: '0' } } }) + '\\n');
+setTimeout(() => done(false), 20000);
+`;
+function answersAcp(run, file, args, { env, cwd }) {
+  const result = run(process.execPath, ['-e', ACP_PROBE, file, ...args], { env, cwd, stdio: 'ignore', timeout: 30000 });
+  return result.status === 0;
+}
 // Which installed CLIs are signed in and can run here. The checks run with the
 // environment subagents get: the person's own, without any provider sign-in
 // variable and without the lead session's bindings, and PATH without folders in
@@ -163,8 +192,20 @@ function survey(config, { env = process.env, run = spawnSync, workspace = null }
   const ready = [];
   const signedOut = [];
   const noSandbox = [];
+  const unsupported = [];
+  const noLogin = [];
   for (const cli of found) {
     const info = SUBAGENT_CLIS[cli.name];
+    if (info.acp) {
+      const cwd = workspace && fs.existsSync(workspace) ? workspace : process.cwd();
+      if (!answersAcp(run, cli.file, info.acp, { env: clean, cwd })) { unsupported.push(cli.name); continue; }
+      ready.push(cli.name);
+      if (info.logins) {
+        const listing = run(cli.file, info.logins.args, { cwd, env: clean, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 20000, maxBuffer: 64 * 1024 });
+        if (listing.status === 0 && info.logins.none.test(String(listing.stdout || '').replace(/\x1b\[[0-9;]*m/g, ''))) noLogin.push(cli.name);
+      }
+      continue;
+    }
     const result = run(cli.file, info.status, { env: clean, stdio: 'ignore', timeout: 15000 });
     if (result.status !== 0) { signedOut.push(cli.name); continue; }
     if (info.sandbox && workspace && fs.existsSync(workspace)) {
@@ -176,10 +217,16 @@ function survey(config, { env = process.env, run = spawnSync, workspace = null }
     }
     ready.push(cli.name);
   }
-  return { installed: found.map(cli => cli.name), ready, signedOut, noSandbox };
+  return { installed: found.map(cli => cli.name), ready, signedOut, noSandbox, unsupported, noLogin };
 }
 function signInHint(name) {
   return `${name} is installed, but Fleet found no saved login its subagents can use. Subagents use a CLI's own saved login, not sign-in variables or settings files, so a sign-in kept only in one of those does not count. To use ${name}, run \`${SUBAGENT_CLIS[name].signIn}\` once in a terminal, then run ${SETUP_COMMAND} again.`;
+}
+function unsupportedHint(name) {
+  return `${name} is installed, but its \`${name} ${SUBAGENT_CLIS[name].acp.join(' ')}\` command did not answer the protocol's initialize request, so Fleet cannot start it as a subagent. Update ${name}, then run ${SETUP_COMMAND} again.`;
+}
+function noLoginHint(name) {
+  return `${name} has no saved login. Its hosted models may refuse a subagent (they can refuse requests that do not come from ${name} itself), so a subagent's first turn can fail. Run \`${SUBAGENT_CLIS[name].signIn}\` once in a terminal, or set up a provider in ${name}'s own configuration.`;
 }
 function sandboxHint(name) {
   return `${name} is signed in, but its sandbox cannot start on this computer, so its subagents could not edit files. Follow ${SUBAGENT_CLIS[name].sandbox.help}, then run ${SETUP_COMMAND} again.`;
@@ -188,7 +235,7 @@ function surveyNote(status) {
   if (!status.installed.length) {
     return `Subagents are off because no supported agent CLI (${Object.keys(SUBAGENT_CLIS).join(', ')}) was found on PATH. Install one, sign in, then run ${SETUP_COMMAND} again.`;
   }
-  return [...status.signedOut.map(signInHint), ...status.noSandbox.map(sandboxHint)].join('\n');
+  return [...status.signedOut.map(signInHint), ...status.noSandbox.map(sandboxHint), ...status.unsupported.map(unsupportedHint)].join('\n');
 }
 // The person may name which signed-in CLIs subagents use; by default all of them.
 function chosenProviders(status, list) {
@@ -199,7 +246,8 @@ function chosenProviders(status, list) {
   const unavailable = asked.filter(name => !status.ready.includes(name));
   if (unavailable.length) {
     throw new Error(unavailable.map(name => (status.signedOut.includes(name) ? signInHint(name)
-      : status.noSandbox.includes(name) ? sandboxHint(name) : `${name} is not installed on PATH.`)).join(' '));
+      : status.noSandbox.includes(name) ? sandboxHint(name)
+        : status.unsupported.includes(name) ? unsupportedHint(name) : `${name} is not installed on PATH.`)).join(' '));
   }
   return Object.keys(SUBAGENT_CLIS).filter(name => asked.includes(name));
 }
@@ -256,8 +304,8 @@ function rebind() {
   const tiers = require(path.join(config.engine, 'src/lib/fleet-worker-tiers'));
   const models = (previous.models || []).filter(name => Object.hasOwn(tiers, name) && chosen.includes(tiers[name].provider));
   const dropped = previous.workers ? (previous.providers || []).filter(name => !chosen.includes(name)) : [];
-  let note = dropped.length ? [...status.signedOut, ...status.noSandbox].filter(name => dropped.includes(name))
-    .map(name => (status.signedOut.includes(name) ? signInHint(name) : sandboxHint(name))).join('\n') : '';
+  let note = dropped.length ? [...status.signedOut, ...status.noSandbox, ...status.unsupported].filter(name => dropped.includes(name))
+    .map(name => (status.signedOut.includes(name) ? signInHint(name) : status.noSandbox.includes(name) ? sandboxHint(name) : unsupportedHint(name))).join('\n') : '';
   const host = path.join(config.engine, 'bin/toolsenabled-host.js');
   const base = ['setup', '--plugin', '--workspace', previous.workspace, '--tier', 'standard', '--state-root', config.stateRoot];
   let result;
@@ -288,9 +336,11 @@ async function main(argv = process.argv.slice(2)) {
   const models = chosen.length ? chosenModels(config, chosen, named.models) : null;
   // Hints about other CLIs are noise when the person chose which ones to use.
   let note = named.providers ? '' : surveyNote(status);
+  const cautions = status.noLogin.filter(name => chosen.includes(name)).map(noLoginHint).join('\n');
+  if (cautions) note = [note, cautions].filter(Boolean).join('\n');
   if (action === '--check') {
     process.stdout.write(JSON.stringify({ mode: config.mode, workspace, providers: chosen, ...(models ? { models } : {}), installed: status.installed,
-      signedOut: status.signedOut, noSandbox: status.noSandbox, tier: 'standard', subagents: chosen.length > 0, ...(note ? { note } : {}) }) + '\n');
+      signedOut: status.signedOut, noSandbox: status.noSandbox, unsupported: status.unsupported, tier: 'standard', subagents: chosen.length > 0, ...(note ? { note } : {}) }) + '\n');
     return;
   }
   const host = path.join(config.engine, 'bin/toolsenabled-host.js');

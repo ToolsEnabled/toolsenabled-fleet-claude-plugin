@@ -171,7 +171,10 @@ const AGENT_SPAWN_EFFORT_BY_PROVIDER = Object.freeze({
   claude: Object.freeze({
     accepts: Object.freeze(['low', 'medium', 'high', 'xhigh', 'max', 'ultra']),
     applies: Object.freeze({ ultra: 'max' })
-  })
+  }),
+  ...Object.fromEntries(require('./subagent-clis').SUBAGENT_CLIS
+    .filter(row => row.kind === 'acp')
+    .map(row => [row.id, Object.freeze({ accepts: row.efforts, applies: Object.freeze({}) })]))
 });
 
 /* WHAT THE TIER ALREADY DECIDED, AND WHAT IS LEFT FOR THE CALLER TO SAY.

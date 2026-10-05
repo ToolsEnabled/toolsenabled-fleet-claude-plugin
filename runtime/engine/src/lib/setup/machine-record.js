@@ -55,7 +55,9 @@ const BRIDGE_PORT_RANGE = Object.freeze({ first: 4610, last: 4619 });
 const LOOPBACK_HOST = '127.0.0.1';
 
 const MACHINE_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
-const OPENSHELL_REGISTRATION_PROVIDERS = PROVIDER_ORDER;
+// Version-1 setup history contains only the original native registrations.
+// Keep its persisted shape valid while the worker catalog grows.
+const OPENSHELL_REGISTRATION_PROVIDERS = require('../openshell-worker-providers').NATIVE_PROVIDERS;
 const OPENSHELL_REGISTRATION_STATES = Object.freeze(['never', 'configured', 'unknown']);
 
 class SetupRefusal extends Error {
@@ -325,7 +327,7 @@ function validateMachineRecord(record) {
   }
   if (!Number.isFinite(record.createdAtMs)) errors.push('createdAtMs must be a number');
   if (record.openShellRegistrations !== undefined && !validateOpenShellRegistrations(record.openShellRegistrations)) {
-    errors.push('openShellRegistrations must contain bounded version-1 setup history for codex and claude');
+    errors.push('openShellRegistrations must contain bounded version-1 native worker setup history');
   }
 
   return { ok: errors.length === 0, errors };

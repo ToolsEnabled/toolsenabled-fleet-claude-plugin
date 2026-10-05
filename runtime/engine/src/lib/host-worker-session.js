@@ -82,8 +82,8 @@ function hostWorkerEntry({ env, config, provider, socketPath, spec, tokenFile })
   };
 }
 // The lead session's bindings (session ids, messaging socket, IDE binding and
-// Fleet's internal variables) are removed from a subagent CLI; its own sign-in
-// variables are kept. One policy, shared with the setup sign-in check:
+// Fleet's internal variables) and provider sign-in variables are removed from
+// a subagent CLI. One policy, shared with the setup sign-in check:
 // src/lib/supervision/launch-environment.js. PATH keeps only the folders the
 // CLI itself was looked up in (no project or temporary folder), so a CLI that
 // starts through `#!/usr/bin/env node`, and every helper Codex lists with,
@@ -315,6 +315,83 @@ function claudeEvents(onEvent, { workspaceRoot = null } = {}) {
   };
 }
 
+// A backstop, not the limit: the title of a call is text the agent supplies, so a hostile model could copy
+// the prefix. What stops a tool of the CLI's own is the permission set the CLI reports before a start
+// (see the profile's confirm()); this closes the session if that ever drifts.
+function acpToolFromFleet(event, prefix) {
+  const input = event?.payload?.rawInput;
+  const explicit = [input?.toolName, input?.name, input?.tool]
+    .filter(value => typeof value === 'string');
+  if (explicit.length) return explicit.every(name => name.startsWith(prefix));
+  // ACP's kind may be a category instead of a tool name. An explicit name
+  // outside those categories takes precedence over the display title.
+  const categories = new Set(['read', 'edit', 'delete', 'move', 'search', 'execute',
+    'think', 'fetch', 'switch_mode', 'other']);
+  if (typeof event?.tool === 'string' && !categories.has(event.tool)) {
+    return event.tool.startsWith(prefix);
+  }
+  return typeof event?.payload?.title === 'string'
+    && event.payload.title.startsWith(prefix);
+}
+
+// How a turn ended, in the words every other agent CLI's report uses.
+const ACP_TURN_STATUS = Object.freeze({ end_turn: 'completed', refusal: 'completed', cancelled: 'interrupted',
+  max_tokens: 'failed', max_turn_requests: 'failed' });
+
+function acpEvents(onEvent, toolNamePrefix) {
+  let session;
+  let failed = false;
+  const forward = event => { if (typeof onEvent === 'function') onEvent(event); };
+  return {
+    bind(value) { session = value; },
+    onEvent(event) {
+      if (event?.type === 'approval_request') {
+        const approval = event.approval || {};
+        const rejection = Array.isArray(approval.availableDecisions)
+          ? approval.availableDecisions.find(option => option?.kind === 'reject_once') : null;
+        try {
+          session.adapter.answerApproval({ approvalId: approval.approvalId,
+            response: { outcome: rejection
+              ? { outcome: 'selected', optionId: rejection.optionId }
+              : { outcome: 'cancelled' } } });
+        } catch {
+          failed = true;
+          session?.close();
+          forward({ type: 'turn_completed', threadId: event.threadId, turnId: event.turnId,
+            status: 'failed', text: APPROVAL_DENIED });
+        }
+        return;
+      }
+      if (!failed && event?.type === 'tool_call' && !acpToolFromFleet(event, toolNamePrefix)) {
+        failed = true;
+        try { session?.close(); } catch { /* owned process cleanup remains with the session */ }
+        forward({ type: 'turn_completed', threadId: event.threadId, turnId: event.turnId,
+          status: 'failed', text: 'The ACP worker requested a tool outside Fleet. Its session was closed.' });
+        return;
+      }
+      if (!failed) {
+        forward(event?.type === 'turn_completed' && Object.hasOwn(ACP_TURN_STATUS, event.status)
+          ? { ...event, status: ACP_TURN_STATUS[event.status] } : event);
+      }
+    }
+  };
+}
+
+// The JSON an agent CLI prints about the configuration it would run with, from
+// its own inspection command; null when it cannot say.
+function inspectAcpProfile({ command, args, env, cwd, timeoutMs = 60_000 }) {
+  const result = require('node:child_process').spawnSync(command, args, { cwd, env,
+    encoding: 'utf8', timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024,
+    stdio: ['ignore', 'pipe', 'ignore'] });
+  // A slow answer is not the same as a configuration that is not confined.
+  if (result.error && result.error.code === 'ETIMEDOUT') {
+    throw refusal('HOST_WORKER_AMBIENT_TIMEOUT',
+      'The agent CLI did not report its configuration in time, so nothing was started. If the computer is busy, try again.');
+  }
+  try { return result.status === 0 && !result.error ? JSON.parse(result.stdout) : null; }
+  catch { return null; }
+}
+
 // The real CLI launches run only the absolute program pinned for this tree,
 // never a name looked up again on PATH (see pinnedCli in the launcher below).
 function pinnedCommand(options, name) {
@@ -330,6 +407,9 @@ function createHostWorkerLauncher({ env = process.env, config, workspaceRoot, so
   resumeCodex = options => require('./agent-engine/codex-process').resumeCodexSession(pinnedCommand(options, 'codex')),
   startClaude = options => require('./agent-engine/claude-cli-process').startClaudeSession(pinnedCommand(options, 'claude')),
   resumeClaude = options => require('./agent-engine/claude-cli-process').resumeClaudeSession(pinnedCommand(options, 'claude')),
+  startAcp = options => require('./agent-engine/acp-process').startAcpSession(pinnedCommand(options, options.provider)),
+  resumeAcp = options => require('./agent-engine/acp-process').resumeAcpSession(pinnedCommand(options, options.provider)),
+  inspectAcp = inspectAcpProfile,
   checkNative = () => require('./host-worker-prerequisite').requireHostWorkerNative(),
   agentApiMode = () => require('./agent-api-policy').agentApiMode({ env }),
   listCodexMcp = listCodexMcpServers,
@@ -372,6 +452,61 @@ function createHostWorkerLauncher({ env = process.env, config, workspaceRoot, so
     writePrivate(tokenFile, `${spec.linkToken}\n`, config.stateRoot);
     const common = { cwd: workspaceRoot, env: cliEnvironment(env, workspaceRoot), onEvent: spec.onEvent, containProcessTree: true,
       ...(command ? { command } : {}) };
+    const cli = require('./subagent-clis').subagentCli(spec.provider);
+    if (cli && cli.kind === 'acp') {
+      const { acpProfile, acpMcpServers } = require('./agent-engine/acp-profiles');
+      const profile = acpProfile(spec.provider);
+      if (!profile) throw refusal('HOST_WORKER_PROFILE_UNAVAILABLE', 'The listed ACP worker has no launch profile.');
+      pinnedCommand({ command }, spec.provider);
+      const withoutOverrides = { ...common.env };
+      for (const name of Object.keys(withoutOverrides)) {
+        if ((profile.overrides || []).some(listed => listed.toLowerCase() === name.toLowerCase())) delete withoutOverrides[name];
+      }
+      const unconfined = reason => refusal('HOST_WORKER_AMBIENT_TOOLS',
+        `${reason} Nothing was started: ${profile.displayName || spec.provider} subagents run only with Fleet's tools.`);
+      // What the CLI would load from the person's own setup, with the isolation switches on.
+      const ambientEnv = { ...withoutOverrides, ...(profile.switches || {}) };
+      const ambient = profile.inspect ? inspectAcp({ command, args: profile.inspect.config, env: ambientEnv, cwd: workspaceRoot }) : null;
+      if (profile.inspect && !ambient) throw unconfined(`${profile.displayName || spec.provider} did not report its configuration.`);
+      const prepared = profile.prepare({ nodeFolder: spec.nodeFolder, ambient });
+      if (!prepared || typeof prepared.serverName !== 'string' || typeof prepared.toolNamePrefix !== 'string'
+          || !Array.isArray(prepared.args) || prepared.args.some(arg => typeof arg !== 'string')
+          || !prepared.env || typeof prepared.env !== 'object' || !Array.isArray(prepared.files)
+          || Object.keys(prepared.env).some(name => /(?:^|_)(?:HOME|API_?KEY|AUTH_?TOKEN|ACCESS_?TOKEN|OAUTH|CREDENTIALS?|TOKEN|KEY|SECRET|PASSWORD)(?:_|$)/i.test(name))
+          || prepared.files.some(item => !item || typeof item.file !== 'string'
+            || !path.isAbsolute(item.file) || !within(spec.nodeFolder, item.file)
+            || typeof item.text !== 'string')) {
+        throw refusal('HOST_WORKER_PROFILE_INVALID', 'ACP profile files and environment must stay inside the private node boundary.');
+      }
+      for (const { file, text } of prepared.files) writePrivate(file, text, config.stateRoot);
+      const launchEnv = { ...withoutOverrides, ...prepared.env };
+      // What the CLI reports with the generated file in place: confirmed, not assumed.
+      if (profile.inspect && profile.confirm) {
+        const resolved = inspectAcp({ command, args: profile.inspect.config, env: launchEnv, cwd: workspaceRoot });
+        const agent = inspectAcp({ command, args: profile.inspect.agent, env: launchEnv, cwd: workspaceRoot });
+        const skills = profile.inspect.skills ? inspectAcp({ command, args: profile.inspect.skills, env: launchEnv, cwd: workspaceRoot }) : undefined;
+        const problem = profile.confirm({ config: resolved, agent, skills, serverName: prepared.serverName });
+        if (problem) throw unconfined(problem);
+      }
+      const events = acpEvents(spec.onEvent, prepared.toolNamePrefix);
+      const options = { ...common, provider: spec.provider, profile, args: prepared.args,
+        env: launchEnv, mcpServers: acpMcpServers(prepared.serverName, entry),
+        onEvent: events.onEvent, ...(spec.model && spec.model !== 'auto' ? { model: spec.model } : {}) };
+      let session;
+      try {
+        session = spec.threadId
+          ? await resumeAcp({ ...options, threadId: spec.threadId })
+          : await startAcp(options);
+      } catch (error) {
+        if (error?.code === 'ACP_AUTH_REQUIRED') {
+          throw refusal('HOST_WORKER_AUTH_REQUIRED',
+            `${profile.displayName || spec.provider} needs its own saved login. Run "${profile.loginCommand}" in a terminal, then retry.`);
+        }
+        throw error;
+      }
+      events.bind(session);
+      return Object.freeze({ ...session, apiMode, turnCompletion: 'event', standingRulesDelivered: false });
+    }
     if (spec.provider === 'codex') {
       const events = codexEvents(spec.onEvent);
       const beforeThread = async adapter => {
@@ -488,4 +623,4 @@ function createHostWorkerLauncher({ env = process.env, config, workspaceRoot, so
 }
 
 module.exports = { createHostWorkerLauncher, hostWorkerEntry, HOST_SESSION_ENV, STANDARD_CODEX_FEATURES_OFF, listCodexMcpServers,
-  listCodexModelCatalog };
+  listCodexModelCatalog, inspectAcpProfile };

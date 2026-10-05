@@ -1,9 +1,9 @@
 'use strict';
 
-// Native worker choices for the Fleet tree. The catalog is data so discovering
-// a worker never initializes a detached dispatcher or any provider session.
+// Worker choices for the Fleet tree. The catalog is data so discovering a
+// worker never initializes a provider session.
 const declared = require('./fleet-worker-tiers.json');
-const { PROVIDER_ORDER } = require('./openshell-worker-providers');
+const { PROVIDER_ORDER } = require('./subagent-clis');
 const tiers = {};
 for (const [name, row] of Object.entries(declared).sort(([, a], [, b]) =>
   PROVIDER_ORDER.indexOf(a.provider) - PROVIDER_ORDER.indexOf(b.provider))) {

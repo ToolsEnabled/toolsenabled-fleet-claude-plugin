@@ -111,6 +111,16 @@ const PROVIDER_TOOLCHAIN = deepFreeze({
       ],
     },
   },
+  ...Object.fromEntries(require('../subagent-clis').SUBAGENT_CLIS
+    .filter(row => row.kind === 'acp').map(row => [row.id, {
+      id: row.id, label: row.displayName,
+      npmPackage: row.npmPackage,
+      nativeLayouts: [], selfUpdateOff: null,
+      features: { probe: 'acp', list: [
+        feature('initialize', true), feature('session/new', true),
+        feature('session/prompt', true), feature('session/cancel', true)
+      ] }
+    }]))
 });
 
 function rowFor(providerId, client = null) {
