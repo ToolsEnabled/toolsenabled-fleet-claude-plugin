@@ -2,7 +2,7 @@
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { childEnvironment } = require('./runtime-config');
-const VERSION = '1.10.0';
+const VERSION = '1.10.1';
 const PROTOCOLS = Object.freeze(['2024-11-05', '2025-03-26', '2025-06-18']);
 const guidance = 'Fleet is installed but not set up for this project. Type /tefleet setup (or ask Claude to set up Fleet) and approve the setup tool. Fleet\'s tools then appear in this session.';
 // Fleet works in one project at a time; from any other project it offers to move.
@@ -49,7 +49,7 @@ function runSetup(workspace, { providers, run = spawnSync, env = process.env,
   }
   if (providers !== undefined && (!Array.isArray(providers) || !providers.length
       || !providers.every(name => typeof name === 'string' && /^[a-z][a-z0-9-]{0,31}$/.test(name)))) {
-    return { ok: false, result: text('List the agent CLIs for subagents by name, for example ["codex"], or leave providers out.', true) };
+    return { ok: false, result: text('List the agent CLIs for subagents by name (claude, codex or opencode), or leave providers out.', true) };
   }
   const refusal = require('./setup-entry').setupRefusal(workspace, { env, cwd: process.cwd() });
   if (refusal) return { ok: false, result: text(`Fleet setup did not finish: ${refusal}`, true) };

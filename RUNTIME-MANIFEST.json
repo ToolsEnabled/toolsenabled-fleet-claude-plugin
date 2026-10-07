@@ -6,11 +6,11 @@
       "executable": false
     },
     ".claude-plugin/marketplace.json": {
-      "sha256": "f182379ee9a48f80329e208a47654d6a9e1d6f3b71d13a9333aad9d2710bb698",
+      "sha256": "d1037770be2f1af943332f443fa41d205d258bafdb63d3cff32ae1799b969690",
       "executable": false
     },
     ".claude-plugin/plugin.json": {
-      "sha256": "c1db0dca163a00d28404bbe948d72d103edc2339803cf3012d4563424a6ff0dd",
+      "sha256": "4b7030d1b015e2b1bb6a5f5bd157e4fa46ddd86d4407af0888408010b18081bf",
       "executable": false
     },
     ".mcp.json": {
@@ -22,7 +22,7 @@
       "executable": false
     },
     "LOCAL-PATCHES.json": {
-      "sha256": "cf5becdefeff522406932376abd76492bfd306725ce029baea130be075f5e6b2",
+      "sha256": "6533784854e4b9364ab7e11525275ca741cc6f34b33a7cd110d31792d4bc95a9",
       "executable": false
     },
     "PRIVACY.md": {
@@ -30,7 +30,7 @@
       "executable": false
     },
     "README.md": {
-      "sha256": "e161f9b6fe9f30592299f160983349789ea3f503db3e3292ce4592e07921d2d9",
+      "sha256": "2b83c00bb8472e259064477f1e3bb0c33ac9a845d9fd2859f19458a69dbd69a2",
       "executable": false
     },
     "RECOVERY.md": {
@@ -38,7 +38,7 @@
       "executable": false
     },
     "SOURCE-PINS.json": {
-      "sha256": "485c41eef24b61d7c1460e622b0b3e9f096a3951193ca6accfd7894f5b3f0dd0",
+      "sha256": "b4929f90efab4fb28ba61ae4300c64c4f7d5b02c44faa0f346bf74658f5bb2c6",
       "executable": false
     },
     "commands/tefleet.md": {
@@ -486,7 +486,7 @@
       "executable": false
     },
     "runtime/engine/src/lib/host-worker-session.js": {
-      "sha256": "247ce28240d7a84bdd4e22dd4c11facc0aef123eefab81683795406fad221213",
+      "sha256": "f2ffab3a50b5bcf2bf40be45d108d4a0d63df201a46772bc8a5442eb174fc4fa",
       "executable": false
     },
     "runtime/engine/src/lib/installed-role-memory.js": {
@@ -522,7 +522,7 @@
       "executable": false
     },
     "runtime/engine/src/lib/openshell-agent-host.js": {
-      "sha256": "2e0b7ca6d2af49f01589c001cf29d469eb73557cc93ce108e00fb71aaf81a945",
+      "sha256": "701cb7cdd4ee7de7994326a6ce69169b3f990011935ff889fbc6b64705da6974",
       "executable": false
     },
     "runtime/engine/src/lib/openshell-ledger-page.js": {
@@ -834,11 +834,11 @@
       "executable": false
     },
     "setup-entry.js": {
-      "sha256": "6562bdacfee3e9d600d0d683b52331a7d30929f4301c5607cb66cd4b57e31251",
+      "sha256": "6eb4dfb5a4985fc10eb615ea1537e591d882cc9f00be617eb5be129283f4d334",
       "executable": false
     },
     "setup-server.js": {
-      "sha256": "7566ede4a1b481e6d40fb5f7f71d32c4756934de69c31f769ac2a3eaf9da2573",
+      "sha256": "b69eeea89a29213e5d57bd4b8448df3e3a2a8a8dbbae4b4895c757c104ee02cc",
       "executable": false
     },
     "skills/toolsenabled-fleet/SKILL.md": {

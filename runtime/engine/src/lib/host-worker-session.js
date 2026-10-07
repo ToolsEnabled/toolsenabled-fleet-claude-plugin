@@ -275,7 +275,7 @@ function codexEvents(onEvent) {
             response: approval.kind === 'permissions' ? { permissions: {}, scope: 'turn' } : { decision: 'decline' } });
         } catch {
           try { session?.close(); } catch { /* the normal owned-session close remains authoritative */ }
-          forward({ type: 'turn_completed', threadId: event.threadId, turnId: event.turnId, status: 'failed', text: APPROVAL_DENIED });
+          forward({ type: 'turn_completed', threadId: event.threadId, turnId: event.turnId, status: 'failed', text: APPROVAL_DENIED, sessionEnded: true });
           deniedTurns.delete(event.turnId);
           assistantText.delete(event.turnId);
         }
@@ -288,9 +288,16 @@ function codexEvents(onEvent) {
         deniedTurns.delete(event.turnId);
         assistantText.delete(event.turnId);
       }
-      forward(event);
+      forward(fromCli(event));
     },
   };
+}
+
+// Only the launcher itself may say that it closed a session; an event from a CLI never carries that.
+function fromCli(event) {
+  if (!event || typeof event !== 'object' || !Object.hasOwn(event, 'sessionEnded')) return event;
+  const { sessionEnded, ...rest } = event;
+  return rest;
 }
 
 function claudeEvents(onEvent, { workspaceRoot = null } = {}) {
@@ -310,7 +317,7 @@ function claudeEvents(onEvent, { workspaceRoot = null } = {}) {
       }
       assistantText.delete(event.turnId);
     }
-    if (typeof onEvent === 'function') return onEvent(event);
+    if (typeof onEvent === 'function') return onEvent(fromCli(event));
   };
 }
 
@@ -331,6 +338,17 @@ function acpToolFromFleet(event, prefix) {
   }
   return typeof event?.payload?.title === 'string'
     && event.payload.title.startsWith(prefix);
+}
+
+// A model that leaves out the server's prefix (small models often do) asks for one of Fleet's own tools by its
+// bare name, for example host_write_file. That call is still treated as outside Fleet and closes the session,
+// because a call's title cannot prove which tool would run; the report says what happened and that resuming the
+// subagent lets the model try again, since its conversation is kept.
+let fleetToolNames = null;
+function bareFleetToolName(event) {
+  fleetToolNames ||= new Set(require('./tool-registry').listTools().map(tool => tool.name.replace(/\./g, '_')));
+  const title = event?.payload?.title;
+  return typeof title === 'string' && fleetToolNames.has(title) ? title : null;
 }
 
 // How a turn ended, in the words every other agent CLI's report uses.
@@ -357,20 +375,24 @@ function acpEvents(onEvent, toolNamePrefix) {
           failed = true;
           session?.close();
           forward({ type: 'turn_completed', threadId: event.threadId, turnId: event.turnId,
-            status: 'failed', text: APPROVAL_DENIED });
+            status: 'failed', text: APPROVAL_DENIED, sessionEnded: true });
         }
         return;
       }
       if (!failed && event?.type === 'tool_call' && !acpToolFromFleet(event, toolNamePrefix)) {
         failed = true;
         try { session?.close(); } catch { /* owned process cleanup remains with the session */ }
-        forward({ type: 'turn_completed', threadId: event.threadId, turnId: event.turnId,
-          status: 'failed', text: 'The ACP worker requested a tool outside Fleet. Its session was closed.' });
+        const bare = bareFleetToolName(event);
+        forward({ type: 'turn_completed', threadId: event.threadId, turnId: event.turnId, status: 'failed', sessionEnded: true,
+          text: bare
+            ? `The subagent's model asked for ${bare} without its server's prefix, which Fleet treats as a tool outside Fleet, so the session was closed. Resume the subagent to let the model try again; its conversation is kept.`
+            : 'The ACP worker requested a tool outside Fleet. Its session was closed.' });
         return;
       }
       if (!failed) {
-        forward(event?.type === 'turn_completed' && Object.hasOwn(ACP_TURN_STATUS, event.status)
-          ? { ...event, status: ACP_TURN_STATUS[event.status] } : event);
+        const passed = fromCli(event);
+        forward(passed?.type === 'turn_completed' && Object.hasOwn(ACP_TURN_STATUS, passed.status)
+          ? { ...passed, status: ACP_TURN_STATUS[passed.status] } : passed);
       }
     }
   };

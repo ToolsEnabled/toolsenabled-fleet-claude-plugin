@@ -119,10 +119,11 @@ Each CLI reaches those limits by its own mechanism, and each keeps its own sign-
 
 ### OpenCode
 
-- Support was tested with the real OpenCode CLI driven by a scripted local model. A hosted model you signed in to with `opencode auth login` has not been tested.
+- Support was tested with the real OpenCode CLI driven by a scripted local model, and with a real 9-billion-parameter local model that wrote a file through Fleet's file tools, had the five forbidden actions it was asked to try refused, and resumed with its conversation. A hosted model you signed in to with `opencode auth login` has not been tested.
+- A local model server must give the model a context window of at least 16,000 tokens. In testing, OpenCode's prompt with Fleet's tools was about 14,000 tokens; a server that defaults to a smaller window, such as 4,096, cuts the prompt off, and the model then answers in text without calling any tool.
 - A subagent changes files only when its model calls Fleet's file tools. Check what it wrote, not only what it said, especially with a small local model.
 - When a turn fails, OpenCode's own provider message reaches you in the subagent's report.
-- The limit on OpenCode's own tools is the set of denied tools that OpenCode itself reports before a start. A tool call from outside Fleet's server also closes the session, but only as a backstop, because the name of a call is text the agent supplies.
+- The limit on OpenCode's own tools is the set of denied tools that OpenCode itself reports before a start. A tool call from outside Fleet's server also closes the session, but only as a backstop, because the name of a call is text the agent supplies. A small model sometimes asks for one of Fleet's tools without the server's prefix; that call closes the session too, as a precaution, and the report says so. Resume the subagent to let the model try again: its conversation is kept.
 - If OpenCode is slow to report its configuration, nothing starts and the message says so; try again.
 
 Subagents run under your operating-system account. Fleet is not an operating-system sandbox, and its records can be changed by any program running as you. The plugin runs only at the Standard level; setting another level by hand is refused.
@@ -150,6 +151,7 @@ In Claude Code 2.1.287+ in a terminal, two panes open without a model request:
 
 - Fleet runs on Linux x86_64 only, directly on your computer; it refuses to start inside a ToolsEnabled OpenShell sandbox (where `OPENSHELL_SANDBOX` is `1`).
 - If an OpenCode subagent's first turn fails with a message from OpenCode's provider, OpenCode has no model it can use for another program: run `opencode auth login` or set up a provider in OpenCode's own configuration, then start a new subagent.
+- If setup says an agent CLI did not answer in time, run `/tefleet setup` again; a busy computer can be slow to start it.
 - If setup says an agent CLI is ready but its subagents refuse to start with a sandbox message, the CLI's sandbox is failing now and then: run `/tefleet setup` again, and follow the CLI's own sandbox help if it keeps failing.
 - If Fleet says it will not run with your Node.js, put a Node.js from outside your project and temporary folders first on your PATH (for example `/usr/bin/node`), then restart Claude Code.
 

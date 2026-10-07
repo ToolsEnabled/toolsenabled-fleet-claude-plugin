@@ -157,34 +157,42 @@ function checkProject(workspace, options) {
   if (refusal) throw new Error(refusal);
   return workspace;
 }
-// Starts an ACP CLI the way a subagent starts it and asks the protocol's initialize request. True only
-// when the CLI answers with a protocol version; nothing is sent to a model.
+// Starts an ACP CLI the way a subagent starts it and asks the protocol's initialize request; nothing is sent
+// to a model. The answer is 'ok' when the CLI answers with a protocol version, 'slow' when it did not answer
+// in time (a busy computer can take that long to start it), and 'no' for anything else.
 const ACP_PROBE = `
 const { spawn } = require('node:child_process');
-const [file, ...args] = process.argv.slice(1);
+const [deadline, file, ...args] = process.argv.slice(1);
 const child = spawn(file, args, { stdio: ['pipe', 'pipe', 'ignore'], cwd: process.cwd() });
 let text = '';
-const done = ok => { try { child.kill('SIGTERM'); } catch {} process.exit(ok ? 0 : 1); };
-child.on('error', () => done(false));
-child.on('exit', () => done(false));
+// The CLI is ended, and seen to end, before the answer is given, so a second ask never overlaps the first.
+let finished = false;
+const done = code => { if (finished) return; finished = true; clearTimeout(deadlineTimer); child.removeAllListeners('exit'); try { child.kill('SIGTERM'); } catch {}
+  const force = setTimeout(() => { try { child.kill('SIGKILL'); } catch {} setTimeout(() => process.exit(code), 1000); }, 2000);
+  child.once('exit', () => { clearTimeout(force); process.exit(code); }); if (child.exitCode !== null || child.signalCode !== null) process.exit(code); };
+child.on('error', () => done(1));
+child.once('exit', () => done(1));
 child.stdout.on('data', chunk => {
   text += chunk;
   for (const line of text.split('\\n')) {
-    try { const message = JSON.parse(line); if (message.id === 1) done(Number.isInteger(message.result && message.result.protocolVersion)); } catch {}
+    try { const message = JSON.parse(line); if (message.id === 1) done(Number.isInteger(message.result && message.result.protocolVersion) ? 0 : 1); } catch {}
   }
 });
 child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: 1, clientCapabilities: {}, clientInfo: { name: 'fleet', version: '0' } } }) + '\\n');
-setTimeout(() => done(false), 20000);
+const deadlineTimer = setTimeout(() => done(2), Number(deadline));
 `;
-function answersAcp(run, file, args, { env, cwd }) {
-  const result = run(process.execPath, ['-e', ACP_PROBE, file, ...args], { env, cwd, stdio: 'ignore', timeout: 30000 });
-  return result.status === 0;
+const ACP_DEADLINE_MS = 20000;
+function answersAcp(run, file, args, { env, cwd, deadlineMs = ACP_DEADLINE_MS }) {
+  const result = run(process.execPath, ['-e', ACP_PROBE, String(deadlineMs), file, ...args], { env, cwd, stdio: 'ignore', timeout: deadlineMs + 10000 });
+  if (result.status === 0) return 'ok';
+  // Only the probe's own deadline, or the outer timeout, means slow; a crash or a kill from outside is not.
+  return result.status === 2 || (result.error && result.error.code === 'ETIMEDOUT') ? 'slow' : 'no';
 }
 // Which installed CLIs are signed in and can run here. The checks run with the
 // environment subagents get: the person's own, without any provider sign-in
 // variable and without the lead session's bindings, and PATH without folders in
 // the project, Fleet's state folder or a temporary folder.
-function survey(config, { env = process.env, run = spawnSync, workspace = null } = {}) {
+function survey(config, { env = process.env, run = spawnSync, workspace = null, acpDeadlineMs = ACP_DEADLINE_MS } = {}) {
   const launch = launchRules();
   const avoid = [config.stateRoot];
   const clean = { ...launch.subscriptionLaunchEnvironment(env), PATH: safeFolders(env, { workspace, avoid }).join(path.delimiter) };
@@ -193,12 +201,17 @@ function survey(config, { env = process.env, run = spawnSync, workspace = null }
   const signedOut = [];
   const noSandbox = [];
   const unsupported = [];
+  const slow = [];
   const noLogin = [];
   for (const cli of found) {
     const info = SUBAGENT_CLIS[cli.name];
     if (info.acp) {
       const cwd = workspace && fs.existsSync(workspace) ? workspace : process.cwd();
-      if (!answersAcp(run, cli.file, info.acp, { env: clean, cwd })) { unsupported.push(cli.name); continue; }
+      // A CLI that is only slow to start is asked once more before it is left off.
+      let answer = answersAcp(run, cli.file, info.acp, { env: clean, cwd, deadlineMs: acpDeadlineMs });
+      if (answer === 'slow') answer = answersAcp(run, cli.file, info.acp, { env: clean, cwd, deadlineMs: acpDeadlineMs });
+      if (answer === 'slow') { slow.push(cli.name); continue; }
+      if (answer !== 'ok') { unsupported.push(cli.name); continue; }
       ready.push(cli.name);
       if (info.logins) {
         const listing = run(cli.file, info.logins.args, { cwd, env: clean, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 20000, maxBuffer: 64 * 1024 });
@@ -217,13 +230,16 @@ function survey(config, { env = process.env, run = spawnSync, workspace = null }
     }
     ready.push(cli.name);
   }
-  return { installed: found.map(cli => cli.name), ready, signedOut, noSandbox, unsupported, noLogin };
+  return { installed: found.map(cli => cli.name), ready, signedOut, noSandbox, unsupported, slow, noLogin };
 }
 function signInHint(name) {
   return `${name} is installed, but Fleet found no saved login its subagents can use. Subagents use a CLI's own saved login, not sign-in variables or settings files, so a sign-in kept only in one of those does not count. To use ${name}, run \`${SUBAGENT_CLIS[name].signIn}\` once in a terminal, then run ${SETUP_COMMAND} again.`;
 }
 function unsupportedHint(name) {
   return `${name} is installed, but its \`${name} ${SUBAGENT_CLIS[name].acp.join(' ')}\` command did not answer the protocol's initialize request, so Fleet cannot start it as a subagent. Update ${name}, then run ${SETUP_COMMAND} again.`;
+}
+function slowHint(name) {
+  return `${name} is installed, but its \`${name} ${SUBAGENT_CLIS[name].acp.join(' ')}\` command did not answer the protocol's initialize request in time, twice, so it was left off. Run ${SETUP_COMMAND} again; a busy computer can be slow to start it.`;
 }
 function noLoginHint(name) {
   return `${name} has no saved login. Its hosted models may refuse a subagent (they can refuse requests that do not come from ${name} itself), so a subagent's first turn can fail. Run \`${SUBAGENT_CLIS[name].signIn}\` once in a terminal, or set up a provider in ${name}'s own configuration.`;
@@ -235,7 +251,8 @@ function surveyNote(status) {
   if (!status.installed.length) {
     return `Subagents are off because no supported agent CLI (${Object.keys(SUBAGENT_CLIS).join(', ')}) was found on PATH. Install one, sign in, then run ${SETUP_COMMAND} again.`;
   }
-  return [...status.signedOut.map(signInHint), ...status.noSandbox.map(sandboxHint), ...status.unsupported.map(unsupportedHint)].join('\n');
+  return [...status.signedOut.map(signInHint), ...status.noSandbox.map(sandboxHint), ...status.unsupported.map(unsupportedHint),
+    ...status.slow.map(slowHint)].join('\n');
 }
 // The person may name which signed-in CLIs subagents use; by default all of them.
 function chosenProviders(status, list) {
@@ -247,7 +264,8 @@ function chosenProviders(status, list) {
   if (unavailable.length) {
     throw new Error(unavailable.map(name => (status.signedOut.includes(name) ? signInHint(name)
       : status.noSandbox.includes(name) ? sandboxHint(name)
-        : status.unsupported.includes(name) ? unsupportedHint(name) : `${name} is not installed on PATH.`)).join(' '));
+        : status.unsupported.includes(name) ? unsupportedHint(name) : status.slow.includes(name) ? slowHint(name)
+          : `${name} is not installed on PATH.`)).join(' '));
   }
   return Object.keys(SUBAGENT_CLIS).filter(name => asked.includes(name));
 }
@@ -304,8 +322,9 @@ function rebind() {
   const tiers = require(path.join(config.engine, 'src/lib/fleet-worker-tiers'));
   const models = (previous.models || []).filter(name => Object.hasOwn(tiers, name) && chosen.includes(tiers[name].provider));
   const dropped = previous.workers ? (previous.providers || []).filter(name => !chosen.includes(name)) : [];
-  let note = dropped.length ? [...status.signedOut, ...status.noSandbox, ...status.unsupported].filter(name => dropped.includes(name))
-    .map(name => (status.signedOut.includes(name) ? signInHint(name) : status.noSandbox.includes(name) ? sandboxHint(name) : unsupportedHint(name))).join('\n') : '';
+  let note = dropped.length ? [...status.signedOut, ...status.noSandbox, ...status.unsupported, ...status.slow].filter(name => dropped.includes(name))
+    .map(name => (status.signedOut.includes(name) ? signInHint(name) : status.noSandbox.includes(name) ? sandboxHint(name)
+      : status.slow.includes(name) ? slowHint(name) : unsupportedHint(name))).join('\n') : '';
   const host = path.join(config.engine, 'bin/toolsenabled-host.js');
   const base = ['setup', '--plugin', '--workspace', previous.workspace, '--tier', 'standard', '--state-root', config.stateRoot];
   let result;
@@ -340,7 +359,7 @@ async function main(argv = process.argv.slice(2)) {
   if (cautions) note = [note, cautions].filter(Boolean).join('\n');
   if (action === '--check') {
     process.stdout.write(JSON.stringify({ mode: config.mode, workspace, providers: chosen, ...(models ? { models } : {}), installed: status.installed,
-      signedOut: status.signedOut, noSandbox: status.noSandbox, unsupported: status.unsupported, tier: 'standard', subagents: chosen.length > 0, ...(note ? { note } : {}) }) + '\n');
+      signedOut: status.signedOut, noSandbox: status.noSandbox, unsupported: status.unsupported, slow: status.slow, tier: 'standard', subagents: chosen.length > 0, ...(note ? { note } : {}) }) + '\n');
     return;
   }
   const host = path.join(config.engine, 'bin/toolsenabled-host.js');

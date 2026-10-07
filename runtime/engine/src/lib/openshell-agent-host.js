@@ -652,6 +652,13 @@ function createOpenShellAgentHost({
       id: crypto.randomUUID(), kind: 'report', from: node.displayName, fromNodeId: node.nodeId,
       status, text: text || '', at: now(),
     });
+    // A session the launcher closed itself (a refused approval, a tool outside Fleet) is ended here at once, so
+    // the subagent can be resumed and is not reported again as a program that exited by itself.
+    if (event.sessionEnded === true) {
+      serial(node, () => (running(node) ? endSession(node, { state: 'failed',
+        error: { code: 'OPENSHELL_AGENT_SESSION_CLOSED', message: text || 'The session was closed.' } }) : null)).catch(() => {});
+      return;
+    }
     // At the turn boundary: settings that waited for it, then what was queued.
     serial(node, async () => {
       if (node.pending && node.pending.when === 'turn-boundary' && running(node)) await applyPendingNow(node);
