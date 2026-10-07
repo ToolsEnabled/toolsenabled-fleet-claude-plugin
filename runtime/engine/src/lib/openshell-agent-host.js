@@ -655,7 +655,8 @@ function createOpenShellAgentHost({
     // A session the launcher closed itself (a refused approval, a tool outside Fleet) is ended here at once, so
     // the subagent can be resumed and is not reported again as a program that exited by itself.
     if (event.sessionEnded === true) {
-      serial(node, () => (running(node) ? endSession(node, { state: 'failed',
+      // Only that same session: a restart or resume queued before this may have replaced it by now.
+      serial(node, () => (running(node) && live.get(node.nodeId)?.generation === generation ? endSession(node, { state: 'failed',
         error: { code: 'OPENSHELL_AGENT_SESSION_CLOSED', message: text || 'The session was closed.' } }) : null)).catch(() => {});
       return;
     }
@@ -706,7 +707,10 @@ function createOpenShellAgentHost({
     const state = live.get(node.nodeId);
     if (!state || state.generation !== generation || node.turn !== 'running') return;
     completeTurn(node, generation, { type: 'turn_completed', status: 'failed', text: String(error && error.message ? error.message : error) });
-    if (sessionEnded(error)) serial(node, () => endSession(node, { state: 'failed', error })).catch(() => {});
+    // Only that same session: a restart or resume queued before this may have replaced it by now.
+    if (sessionEnded(error)) {
+      serial(node, () => (live.get(node.nodeId)?.generation === generation ? endSession(node, { state: 'failed', error }) : null)).catch(() => {});
+    }
   }
 
   function compositionFor(node, task) {
@@ -846,7 +850,27 @@ function createOpenShellAgentHost({
     if (mode === 'host' && session.standingRulesDelivered !== true) {
       state.pendingRules = rules || (resume ? require('./standing-rules-brief').noStandingRulesInstructions() : null);
     }
-    if (firstTurn !== null) await submitTurn(node, withHandoff(node, firstTurn));
+    if (firstTurn !== null) {
+      const reportedBefore = node.lastTurn;
+      try {
+        await submitTurn(node, withHandoff(node, firstTurn));
+      } catch (error) {
+        // The CLI started but refused its opening task. Unless the CLI already reported that turn, the parent gets
+        // a failed report; either way the session is ended as failed here, in this same step, so it neither keeps
+        // running nor holds a place, and no command queued behind this one is touched.
+        if (state.generation === generation && state.session === session) {
+          if (node.lastTurn === reportedBefore) {
+            const text = bounded(`${node.displayName} could not take its task: ${String(error && error.message ? error.message : error)}`,
+              MAX_REPORT_CHARS);
+            node.lastTurn = Object.freeze({ turnId: null, status: turnStatus('failed'), text, completedAt: now() });
+            deliver(node.parentNodeId || null, { id: crypto.randomUUID(), kind: 'report', from: node.displayName,
+              fromNodeId: node.nodeId, status: node.lastTurn.status, text, at: now() });
+          }
+          await endSession(node, { state: 'failed', error });
+        }
+        throw error;
+      }
+    }
     return session;
   }
 

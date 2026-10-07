@@ -123,6 +123,11 @@ function classifySourceCode(code, status, timedOut, matches) {
   // Waiting cannot supply a signing identity or an unavailable kernel API.
   // These prerequisites require repair; keep other availability errors retryable.
   if (['AUDIT_SIGNING_KEY_UNAVAILABLE', 'LINUX_PROCESS_NATIVE_UNAVAILABLE'].includes(code)) return 'INPUT_REQUIRED';
+  // A subagent that cannot start because a CLI is missing or out of date, or because it does not offer the
+  // chosen model, mode or effort: the person can act on Fleet's own sentence (install or update the CLI, choose
+  // what it offers), and "try again later" or "internal error" hid it.
+  if (['HOST_WORKER_CLI_UNAVAILABLE', 'CLAUDE_CLI_UPDATE_NEEDED', 'CODEX_CLI_INCOMPATIBLE'].includes(code)) return 'INPUT_REQUIRED';
+  if (['HOST_WORKER_MODEL_UNLISTED', 'ACP_MODEL_UNAVAILABLE', 'ACP_MODE_UNAVAILABLE', 'ACP_EFFORT_UNAVAILABLE'].includes(code)) return 'INVALID_REQUEST';
   // Losing an interactive transport does not prove a click or keypress failed.
   // Require inspection/input rather than automatically replaying that action.
   if (['PLAYWRIGHT_CALL_TIMEOUT', 'PLAYWRIGHT_CALL_TRANSPORT_CLOSED',

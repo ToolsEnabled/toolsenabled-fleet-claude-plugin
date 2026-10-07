@@ -63,6 +63,27 @@ const { createEventBackpressure, isThenable } = require('./event-backpressure');
  * magic-byte check that rejects input that is not a picture. */
 const { readTurnImage, imageMimeTypeFor } = require('./turn-image-bytes');
 
+
+/* How the program ended, and the last line it wrote to stderr: usually the reason (a refused sign-in, a
+   configuration error). The transport has already removed the person's sign-in secrets from that text. */
+function exitWords(exitInfo) {
+  if (exitInfo && exitInfo.signal) return `signal ${exitInfo.signal}`;
+  const code = exitInfo && exitInfo.error && /^[A-Z][A-Z0-9_]{1,31}$/.test(String(exitInfo.error.code || '')) ? exitInfo.error.code : null;
+  if (code === 'ENOENT' || code === 'EACCES') return 'it could not be run';
+  if (exitInfo && exitInfo.error) return code ? `its connection failed, ${code}` : 'its connection failed';
+  return `exit ${exitInfo && exitInfo.code != null ? exitInfo.code : 'unknown'}`;
+}
+// The line that says what went wrong: the last one that reads like an error, skipping stack frames and a
+// runtime's version footer; otherwise the last line.
+const ERROR_WORDS = /\b(?:error|fail(?:ed|ure)?|denied|refused|unauthori[sz]ed|forbidden|invalid|expired|not found|cannot|could not|unable)\b|\b[45]\d\d\b/i;
+function lastErrorLine(exitInfo) {
+  const lines = String(exitInfo && exitInfo.stderr || '').replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
+    .split(/\r?\n/).map(line => line.replace(/\s+/g, ' ').trim())
+    .filter(line => line && !/^at\s/.test(line) && !/^Node\.js v\d/.test(line) && !/^\^+$/.test(line));
+  const chosen = [...lines].reverse().find(line => ERROR_WORDS.test(line)) || lines[lines.length - 1] || '';
+  return chosen ? `: ${chosen.length > 300 ? `${chosen.slice(0, 300)}...` : chosen}` : '';
+}
+
 class ClaudeCliError extends Error {
   constructor(code, message) {
     super(message);
@@ -911,7 +932,7 @@ class ClaudeCliAdapter {
          which is the silence this project keeps paying for. */
       turn.reject(this.nativeProcessFailure() || new ClaudeCliError(
         'CLAUDE_CLI_EXITED',
-        `The Claude program stopped before finishing the turn (exit ${exitInfo && exitInfo.code}).`
+        `The Claude program stopped before finishing the turn (${exitWords(exitInfo)})${lastErrorLine(exitInfo)}.`
       ));
     }
     for (const pending of this.pendingControl.values()) {

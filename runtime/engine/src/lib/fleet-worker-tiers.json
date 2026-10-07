@@ -9,8 +9,8 @@
   "luna": {
     "provider": "codex",
     "tier": "cheap",
-    "model": "gpt-5.6-luna",
-    "cliModel": "gpt-5.6-luna",
+    "model": "gpt-6-luna",
+    "cliModel": "gpt-6-luna",
     "efforts": [
       "low",
       "medium",
@@ -28,8 +28,8 @@
   "sol": {
     "provider": "codex",
     "tier": "premium",
-    "model": "gpt-5.6-sol",
-    "cliModel": "gpt-5.6-sol"
+    "model": "gpt-6.1-sol",
+    "cliModel": "gpt-6.1-sol"
   },
   "claude-fable": {
     "provider": "claude",
@@ -54,6 +54,12 @@
     "tier": "premium",
     "model": "claude/claude-opus-5-5",
     "cliModel": "claude-opus-5-5"
+  },
+  "claude-sonnet-5-5": {
+    "provider": "claude",
+    "tier": "standard",
+    "model": "claude/claude-sonnet-5-5",
+    "cliModel": "claude-sonnet-5-5"
   },
   "claude-opus-5": {
     "provider": "claude",

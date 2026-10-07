@@ -297,7 +297,10 @@ const CLAUDE_ALIAS_RESOLUTIONS = Object.freeze({
     Object.freeze({ since: '2.1.280', model: 'claude-opus-5-5' }),
     Object.freeze({ since: '0.0.0', model: 'claude-opus-5' })
   ]),
-  sonnet: Object.freeze([Object.freeze({ since: '0.0.0', model: 'claude-sonnet-5' })]),
+  sonnet: Object.freeze([
+    Object.freeze({ since: '2.1.292', model: 'claude-sonnet-5-5' }),
+    Object.freeze({ since: '0.0.0', model: 'claude-sonnet-5' })
+  ]),
   fable: Object.freeze([Object.freeze({ since: '0.0.0', model: 'claude-fable-5-1' })]),
   haiku: Object.freeze([Object.freeze({ since: '0.0.0', model: 'claude-haiku-4-5' })])
 });
@@ -307,6 +310,7 @@ const CLAUDE_ALIAS_RESOLUTIONS = Object.freeze({
 const MODEL_DISPLAY_NAMES = Object.freeze({
   'claude-opus-5-5': 'Opus 5.5',
   'claude-opus-5': 'Opus 5',
+  'claude-sonnet-5-5': 'Sonnet 5.5',
   'claude-sonnet-5': 'Sonnet 5',
   'claude-fable-5-1': 'Fable 5.1',
   'claude-fable-5': 'Fable 5',

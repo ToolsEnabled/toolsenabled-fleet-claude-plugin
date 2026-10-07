@@ -252,7 +252,7 @@ function confineCodexModelCatalog({ list, args, env, cwd, command, model, file, 
   }
   if (model && !listed.some(entry => entry.slug === model)) {
     throw refusal('HOST_WORKER_MODEL_UNLISTED', `Codex's model list does not include ${JSON.stringify(String(model).slice(0, 64))}, `
-      + 'so Fleet could not confirm which of Codex\'s own tools it would get. Nothing was started. Choose a model Codex lists.');
+      + 'so Fleet could not confirm which of Codex\'s own tools it would get. Nothing was started. Update Codex, or choose a model it lists.');
   }
   return override;
 }
@@ -360,7 +360,7 @@ function claudeEvents(onEvent, { workspaceRoot = null } = {}) {
         const outside = require('./claude-workspace-file-tools').outsideWriteDenial(
           event.payload.permissionDeniedFiles, workspaceRoot, 'Standard');
         if (outside) explanation.push(outside);
-        explanation.push('Use a workspace path or ask the person to change the Fleet permission tier before retrying.');
+        explanation.push('Use a path inside the project, or ask the person to do this in their own session.');
         event = { ...event, text: [event.text || assistantText.get(event.turnId), explanation.join(' ')].filter(Boolean).join('\n\n') };
       }
       assistantText.delete(event.turnId);

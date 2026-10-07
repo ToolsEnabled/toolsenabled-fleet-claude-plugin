@@ -108,10 +108,29 @@ function providerFailureCode(info) {
    one action that fixes the cause described above -- a sign-in that a file
    check and `codex login status` both still call good, or a provider key in
    the environment that the status check cannot see. */
-function unrecognizedTurnFailureText(code) {
+/* The HTTP status a failure code carries, and only that number: the one-key
+   record `{ httpConnectionFailed: { httpStatusCode: 401 } }` says the provider
+   answered 401, which tells a refused sign-in from a network fault. */
+function providerFailureStatus(info) {
+  if (info === null || typeof info !== 'object' || Array.isArray(info)) return null;
+  let names;
+  try { names = Object.getOwnPropertyNames(info); } catch { return null; }
+  if (names.length !== 1) return null;
+  const detail = Object.getOwnPropertyDescriptor(info, names[0])?.value;
+  if (detail === null || typeof detail !== 'object' || Array.isArray(detail)) return null;
+  const status = Object.getOwnPropertyDescriptor(detail, 'httpStatusCode')?.value;
+  return Number.isInteger(status) && status >= 100 && status <= 599 ? status : null;
+}
+const CHECK_SIGN_IN = 'Check its sign-in ("codex login status" for a saved login, or the key of a provider in its configuration)';
+function unrecognizedTurnFailureText(code, status = null) {
+  if (status === 401) return `Codex's provider refused its sign-in (HTTP 401). ${CHECK_SIGN_IN}.`;
+  if (status === 403) {
+    return "Codex's provider refused this request (HTTP 403). Check that this account may use the chosen model and provider.";
+  }
+  const answered = status ? ` (HTTP ${status})` : '';
   return code
-    ? `Codex ended this turn with a failure Fleet has no message for: "${code}". Check its sign-in ("codex login status" for a saved login, or the key of a provider in its configuration), and that the Codex CLI is current.`
-    : 'Codex ended this turn with a failure and named no reason Fleet could read. Check its sign-in ("codex login status" for a saved login, or the key of a provider in its configuration), and that the Codex CLI is current.';
+    ? `Codex ended this turn with a failure Fleet has no message for: "${code}"${answered}. ${CHECK_SIGN_IN}, and that the Codex CLI is current.`
+    : `Codex ended this turn with a failure and named no reason Fleet could read. ${CHECK_SIGN_IN}, and that the Codex CLI is current.`;
 }
 /* The connection itself died. `this.closed.message` can quote the child's own
    stderr verbatim -- that is deliberate, it is what a developer reading a log
@@ -1573,6 +1592,16 @@ class CodexAdapter {
 
   _handleServerRequest(fields) {
     const method = requiredString(fields, 'method', 'Codex server request');
+    /* Codex asks its client before an MCP tool call it wants confirmed (an elicitation) and when its model asks
+       the person a question (request_user_input). A subagent has no person to ask, so both are declined, as
+       every other new permission request is, and the turn goes on; the model sees the decline. The answers are
+       the shapes codex-cli 0.160.0's generate-json-schema gives. Ending the session instead lost the subagent. */
+    if (method === 'mcpServer/elicitation/request' || method === 'item/tool/requestUserInput') {
+      const rpcId = fields.id.value;
+      if ((typeof rpcId !== 'number' || !Number.isInteger(rpcId)) && typeof rpcId !== 'string') fail('CODEX_PROTOCOL_INVALID', 'Codex request id is invalid');
+      this._write({ jsonrpc: '2.0', id: rpcId, result: method === 'mcpServer/elicitation/request' ? { action: 'decline' } : { answers: {} } });
+      return;
+    }
     if (![METHOD.commandApproval, METHOD.fileApproval, METHOD.permissionsApproval].includes(method)) {
       fail('CODEX_PROTOCOL_UNSUPPORTED_REQUEST', `Codex app-server requested unsupported host action ${method}`);
     }
@@ -1706,6 +1735,7 @@ class CodexAdapter {
       if (status === 'failed') {
         const error = turn.error?.value != null ? ownRecord(turn.error.value, `${method}.turn.error`) : null;
         const code = providerFailureCode(error ? error.codexErrorInfo?.value : undefined);
+        const httpStatus = providerFailureStatus(error ? error.codexErrorInfo?.value : undefined);
         if (code && Object.hasOwn(TURN_FAILURE_TEXT, code)) text = TURN_FAILURE_TEXT[code];
         if (code === 'usageLimitExceeded') {
           const clock = Number(this.now());
@@ -1716,8 +1746,8 @@ class CodexAdapter {
         // Every OTHER failure used to end here with `text` still null, which is
         // the silence the whole note above is about. It ends with a
         // sentence now, whatever Codex called the failure.
-        if (!text) text = unrecognizedTurnFailureText(code);
-        failure = { provider: 'codex', source: 'turn', ...(code ? { code } : {}), summary: text };
+        if (!text) text = unrecognizedTurnFailureText(code, httpStatus);
+        failure = { provider: 'codex', source: 'turn', ...(code ? { code } : {}), ...(httpStatus ? { httpStatus } : {}), summary: text };
       }
       active.completed = true;
       this._retireTurnApprovals(active);
