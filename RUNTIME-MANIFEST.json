@@ -6,11 +6,11 @@
       "executable": false
     },
     ".claude-plugin/marketplace.json": {
-      "sha256": "d1037770be2f1af943332f443fa41d205d258bafdb63d3cff32ae1799b969690",
+      "sha256": "841edd99008a276c4ca7ae4fd95324f444286bf26f7a2d375921db857731b869",
       "executable": false
     },
     ".claude-plugin/plugin.json": {
-      "sha256": "4b7030d1b015e2b1bb6a5f5bd157e4fa46ddd86d4407af0888408010b18081bf",
+      "sha256": "50bb650816d2ea6a4d0db99cd9b5391d5b5e4ab8e09128da8272a5f294da72e0",
       "executable": false
     },
     ".mcp.json": {
@@ -22,15 +22,15 @@
       "executable": false
     },
     "LOCAL-PATCHES.json": {
-      "sha256": "6533784854e4b9364ab7e11525275ca741cc6f34b33a7cd110d31792d4bc95a9",
+      "sha256": "aef81a98ff1e2f69e2d32a41acc26590417621117e7ca78e7f379b19b17b76c6",
       "executable": false
     },
     "PRIVACY.md": {
-      "sha256": "4786f41186c7e203c55a319361eeb4db6c21424a31507c05a95663fc968e73b1",
+      "sha256": "8249e5b7154b5567911b28e18ae54d6837e647f88cdd032eadee861278493abe",
       "executable": false
     },
     "README.md": {
-      "sha256": "2b83c00bb8472e259064477f1e3bb0c33ac9a845d9fd2859f19458a69dbd69a2",
+      "sha256": "78d19f90c7b48e833d508593ba91318684d840f2480a240b0841dca4d38b6fe4",
       "executable": false
     },
     "RECOVERY.md": {
@@ -38,7 +38,7 @@
       "executable": false
     },
     "SOURCE-PINS.json": {
-      "sha256": "b4929f90efab4fb28ba61ae4300c64c4f7d5b02c44faa0f346bf74658f5bb2c6",
+      "sha256": "cd1008a37e4bb8e71260a04924ca0a9a10c2c653a07864b126d4f2a76cac8dbc",
       "executable": false
     },
     "commands/tefleet.md": {
@@ -46,11 +46,11 @@
       "executable": false
     },
     "docs/INSTALL.md": {
-      "sha256": "fb63b31ac8421900a342c8d0fcbe9bec34857c4b2cf9b41f3bf5e72468179078",
+      "sha256": "fa6a65c5291ef17e333e4e161a3a845fe4624796909b6450133316367a604edb",
       "executable": false
     },
     "hooks/fleet.test.ts": {
-      "sha256": "2fb7fc691ab5fbb254d4a7fc25b667b3abb5bada9b0b41ce3ba2f777ee7a137a",
+      "sha256": "f662ba600841fcabf5bcecc42f842684bdc015639fb209637e18e8db1bf314bf",
       "executable": false
     },
     "hooks/hooks.json": {
@@ -62,7 +62,7 @@
       "executable": false
     },
     "hooks/ledger.test.ts": {
-      "sha256": "8a6d6e8218ce70be2290e67fbc2352d8bbe3f5e0197270ca87fc6e75aa701a16",
+      "sha256": "2816aaf9ab3062c7f7d51c5aa4ad2cdb655f0ac7cc0d0ac6f8752c9fdbc7e951",
       "executable": false
     },
     "hooks/native-commands.test.ts": {
@@ -70,7 +70,7 @@
       "executable": false
     },
     "hooks/register.tsx": {
-      "sha256": "99a5dcfcdc6c0534ab4565b027cfa88b3d2a4df3cc459e76e3de3a632cc914a3",
+      "sha256": "bcd0be8c4f45ad48bec15f856db45df5eb6eebeed4a8c223cd51e821ee04a05a",
       "executable": false
     },
     "hooks/view.mjs": {
@@ -106,7 +106,7 @@
       "executable": false
     },
     "runtime-config.js": {
-      "sha256": "5cc295f4cb813e7d1cbe6a7d0b10f0f2ae01f300ebe5270860f2cda3cdb43e55",
+      "sha256": "cf4ce3fd150ec95cc62859170e48a0305bb99290a91050f199371e0c44c69468",
       "executable": false
     },
     "runtime-entry.js": {
@@ -206,11 +206,11 @@
       "executable": false
     },
     "runtime/engine/src/lib/agent-engine/acp-adapter.js": {
-      "sha256": "143b0a7fbf037acc9c43fb3833888411cbd85a1a27e38103cb2b4a683612157b",
+      "sha256": "a228adedef1b4a5b44d97fb66a6f1574fa40a740ee6d1cf3564e03c840d663ca",
       "executable": false
     },
     "runtime/engine/src/lib/agent-engine/acp-process.js": {
-      "sha256": "a6682b6e9f9765a8e25f385dc6ec6023282d464563a326c3c5b374674fa606a1",
+      "sha256": "65c1e055400bab2993b78d8b416342d3258f92ecbecaf12c516e4a35e7e39a39",
       "executable": false
     },
     "runtime/engine/src/lib/agent-engine/acp-profiles.js": {
@@ -226,15 +226,15 @@
       "executable": false
     },
     "runtime/engine/src/lib/agent-engine/claude-cli-process.js": {
-      "sha256": "6ad6bfec714b479687ad9152f7844d69c381a30b3eea3c78bdd859cce5546891",
+      "sha256": "0c71093d3f948792cff316b9e686e8e9ca2d90df6e1288abf5f4d63b4ec5ece6",
       "executable": false
     },
     "runtime/engine/src/lib/agent-engine/codex-adapter.js": {
-      "sha256": "11ab089bd381f6e2156c5b172bddd5c207f890a28811d6d58bef461727eadde8",
+      "sha256": "514cf2298fe18b63cb5669148326587d81622af38d4aefe82e54b51e368a18b0",
       "executable": false
     },
     "runtime/engine/src/lib/agent-engine/codex-process.js": {
-      "sha256": "90dcad16ca4bf556c8725b8c25b465d0104c70bdb4bf6069e4fa3607f6505abf",
+      "sha256": "2a96ddc9c2a1d4a6668690993b2b4c69dd0fd7a42673727c397deb98e7b0bba9",
       "executable": false
     },
     "runtime/engine/src/lib/agent-engine/codex-startup-cleanup.js": {
@@ -486,7 +486,7 @@
       "executable": false
     },
     "runtime/engine/src/lib/host-worker-session.js": {
-      "sha256": "f2ffab3a50b5bcf2bf40be45d108d4a0d63df201a46772bc8a5442eb174fc4fa",
+      "sha256": "326d2113b459c51c06cc6ccab093039ee64a47751d34bbd9ff0cc75dc5c17b2b",
       "executable": false
     },
     "runtime/engine/src/lib/installed-role-memory.js": {
@@ -594,7 +594,7 @@
       "executable": false
     },
     "runtime/engine/src/lib/proc/hidden-spawn.js": {
-      "sha256": "1d2d7ec5cc02c7e271aac1a6b16402a323d80b081a7b0fe4712232516034a9eb",
+      "sha256": "8511a203b4a908e4359ed67ffd0832b6b692317d865f9482033b7602c87d351c",
       "executable": false
     },
     "runtime/engine/src/lib/proc/process-group.js": {
@@ -726,7 +726,7 @@
       "executable": false
     },
     "runtime/engine/src/lib/setup/machine-record.js": {
-      "sha256": "9da70a99b58f460be8179547d0653ac804643c3babb529c1d25815ce84772641",
+      "sha256": "4f7ca2dcd66764014ce5e23cb1d0353d34c0cc381060ca114bb8f7bd866d4fca",
       "executable": false
     },
     "runtime/engine/src/lib/setup/workspace.js": {
@@ -754,7 +754,7 @@
       "executable": false
     },
     "runtime/engine/src/lib/supervision/launch-environment.js": {
-      "sha256": "6b9e9731fa4214b1a3338c311967c5c4c4df4adb076a72721980893772caca4f",
+      "sha256": "b2f3b0daa89033db38f49dd46bfd26ea32f023dfe777e28ec38f364c3a5ff654",
       "executable": false
     },
     "runtime/engine/src/lib/system-status.js": {
@@ -822,7 +822,7 @@
       "executable": false
     },
     "session-bridge.js": {
-      "sha256": "e2ef4b6d200c26d7c8fec88cf53dc0c4b99e57229ff85062bc14d68d4a9c4637",
+      "sha256": "3036ac446aafdba5a07496ccc1245b578e598ea930794050e2a4df2ef6cb239c",
       "executable": false
     },
     "settings-entry.js": {
@@ -834,11 +834,11 @@
       "executable": false
     },
     "setup-entry.js": {
-      "sha256": "6eb4dfb5a4985fc10eb615ea1537e591d882cc9f00be617eb5be129283f4d334",
+      "sha256": "dde6cf676af73cd1841b75b08e135cc689d83b8c3daaa1764118e164ee37341a",
       "executable": false
     },
     "setup-server.js": {
-      "sha256": "b69eeea89a29213e5d57bd4b8448df3e3a2a8a8dbbae4b4895c757c104ee02cc",
+      "sha256": "ba8b07636e18ef4325f95fb3f6b8c75afeaf3cf773b843671f63a3943d0e0dc1",
       "executable": false
     },
     "skills/toolsenabled-fleet/SKILL.md": {

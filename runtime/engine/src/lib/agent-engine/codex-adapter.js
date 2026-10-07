@@ -106,11 +106,12 @@ function providerFailureCode(info) {
 /* The sentence for a failure Fleet has no text for. It names the
    provider, quotes the provider's own code when there is one, and ends in the
    one action that fixes the cause described above -- a sign-in that a file
-   check and `codex login status` both still call good. */
+   check and `codex login status` both still call good, or a provider key in
+   the environment that the status check cannot see. */
 function unrecognizedTurnFailureText(code) {
   return code
-    ? `Codex ended this turn with a failure Fleet has no message for: "${code}". Check its sign-in with "codex login status", and that the Codex CLI is current.`
-    : 'Codex ended this turn with a failure and named no reason Fleet could read. Check its sign-in with "codex login status", and that the Codex CLI is current.';
+    ? `Codex ended this turn with a failure Fleet has no message for: "${code}". Check its sign-in ("codex login status" for a saved login, or the key of a provider in its configuration), and that the Codex CLI is current.`
+    : 'Codex ended this turn with a failure and named no reason Fleet could read. Check its sign-in ("codex login status" for a saved login, or the key of a provider in its configuration), and that the Codex CLI is current.';
 }
 /* The connection itself died. `this.closed.message` can quote the child's own
    stderr verbatim -- that is deliberate, it is what a developer reading a log

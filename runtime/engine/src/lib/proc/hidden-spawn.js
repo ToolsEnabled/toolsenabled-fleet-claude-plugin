@@ -169,16 +169,16 @@ function spawnHidden(command, args = [], options = {}) {
     ? { ...baseEnv, ...invocation.env }
     : baseEnv;
 
-  /* EVERY CHILD STARTED HERE IS AN AGENT CLI (codex-process.js and
-     claude-cli-process.js are the requirers). Fleet gives it no provider
-     sign-in variable: agentCliEnvironment (src/lib/supervision/launch-environment.js)
-     removes them, and each CLI signs in by its own saved login. There is no
-     channel to add one back, so a caller that states a credential overlay is
+  /* EVERY CHILD STARTED HERE IS AN AGENT CLI (codex-process.js,
+     claude-cli-process.js and acp-process.js are the requirers). It gets the
+     person's environment with their own sign-in variables in place
+     (agentCliEnvironment, src/lib/supervision/launch-environment.js); Fleet never
+     adds a credential of its own, so a caller that states a credential overlay is
      refused instead of carried. */
   if (options.credentialEnvironment !== undefined) {
     throw new HiddenSpawnError(
       'HIDDEN_SPAWN_CREDENTIAL_ENVIRONMENT_REFUSED',
-      'spawnHidden gives a child no provider sign-in variable and has no channel to add one',
+      'spawnHidden adds no credential to a child and has no channel to add one',
     );
   }
 

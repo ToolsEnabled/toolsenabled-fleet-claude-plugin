@@ -36,22 +36,8 @@ let retryDelay = 5000
 let stopRetry: Timer | null = null
 let stopClock: Timer | null = null
 
-// Explicit forwarding matches .mcp.json. No credential values enter argv.
-async function launchEnv($: any) {
-  return {
-    PATH: await $.env.get('PATH') || '',
-    HOME: await $.env.get('HOME') || '',
-    OPENSHELL_SANDBOX: await $.env.get('OPENSHELL_SANDBOX') || '',
-    CLAUDE_CONFIG_DIR: await $.env.get('CLAUDE_CONFIG_DIR') || '',
-    CODEX_HOME: await $.env.get('CODEX_HOME') || '',
-    SSL_CERT_FILE: await $.env.get('SSL_CERT_FILE') || '',
-    NODE_EXTRA_CA_CERTS: await $.env.get('NODE_EXTRA_CA_CERTS') || '',
-    REQUESTS_CA_BUNDLE: await $.env.get('REQUESTS_CA_BUNDLE') || '',
-    CURL_CA_BUNDLE: await $.env.get('CURL_CA_BUNDLE') || '',
-    GIT_SSL_CAINFO: await $.env.get('GIT_SSL_CAINFO') || '',
-    TOOLSENABLED_FLEET_STATE_ROOT: await $.env.get('TOOLSENABLED_FLEET_STATE_ROOT') || '',
-  }
-}
+// The programs started here inherit Claude Code's own environment, as every program a plugin starts does;
+// Fleet reads none of it. No credential value enters argv.
 
 async function setStatus($: any, text: string, warning = false) {
   await update($, snapshot, previous => ({ ...previous, notice: text, warning }))
@@ -120,9 +106,8 @@ async function streamTree($: any) {
   let pending = ''
   let detail = ''
   try {
-    const env = await launchEnv($)
     if (mine !== generation || !alive || settingUp) return
-    const stream = $.process.spawn({ argv: ['node', `${$.plugin.root}/tree-entry.js`, '--watch', '--json-lines', '--session'], env })
+    const stream = $.process.spawn({ argv: ['node', `${$.plugin.root}/tree-entry.js`, '--watch', '--json-lines', '--session'] })
     active = stream
     for await (const chunk of stream) {
       if (mine !== generation) break
@@ -193,7 +178,7 @@ async function setupFleet($: any) {
     const workspace = await $.session.cwd()
     // Setup accepts only the session's own project; name it, so a stale
     // CLAUDE_PROJECT_DIR in Claude Code's environment cannot stand in for it.
-    const env = { ...(await launchEnv($)), CLAUDE_PROJECT_DIR: workspace }
+    const env = { CLAUDE_PROJECT_DIR: workspace }
     const preview = resultJson(await $.process.run(['node', `${$.plugin.root}/setup-entry.js`, '--check', workspace], { cwd: workspace, env }))
     const found = Array.isArray(preview.providers) ? preview.providers.filter((name: unknown) => typeof name === 'string') : []
     const anyInstalled = Array.isArray(preview.installed) && preview.installed.length > 0
@@ -258,7 +243,7 @@ async function loadLedger($: any, offset = 0, revision?: number) {
   try {
     const argv = ['node', `${$.plugin.root}/ledger-entry.js`, '--offset', String(offset), '--limit', String(LEDGER_LIMIT),
       ...(all ? ['--all'] : []), ...(revision === undefined ? [] : ['--revision', String(revision)])]
-    const result = await $.process.run(argv, { env: await launchEnv($), timeoutMs: 10000 })
+    const result = await $.process.run(argv, { timeoutMs: 10000 })
     if (mine !== serial) return
     if (result.exitCode !== 0 || result.isStdoutTruncated || result.isStderrTruncated) {
       const stderr = String(result.stderr || '')

@@ -31,6 +31,9 @@ const METHOD = Object.freeze({
 const TERMINAL_TOOL_STATUSES = Object.freeze(['completed', 'failed', 'cancelled']);
 const MAX_LINE_BYTES = 8_000_000;
 const MAX_IMAGE_BYTES = 3_000_000;
+/* A CLI lists every model of every provider it can sign in to, and one provider alone can offer several
+   hundred, so a model list or a select option is bounded well above that; each line is bounded anyway. */
+const MAX_CHOICES = 4096;
 
 
 class AcpAdapterError extends Error {
@@ -292,7 +295,7 @@ function normalizeSessionConfigOptions(value, label) {
     if (currentValue !== null) normalized.currentValue = currentValue;
     if (Object.hasOwn(fields, 'options')) {
       if (!Array.isArray(fields.options.value) || fields.options.value.length === 0 ||
-        fields.options.value.length > 256) {
+        fields.options.value.length > MAX_CHOICES) {
         fail('ACP_PROTOCOL_INVALID', `${optionLabel}.options must be a bounded non-empty array`);
       }
       const values = new Set();
@@ -340,7 +343,7 @@ function sessionModels(value) {
   const fields = ownRecord(value, 'session models');
   const currentModelId = requiredString(fields, 'currentModelId', 'session models', { max: 512 });
   const choices = fields.availableModels?.value;
-  if (!Array.isArray(choices) || choices.length > 256) fail('ACP_PROTOCOL_INVALID', 'Session model choices must be bounded.');
+  if (!Array.isArray(choices) || choices.length > MAX_CHOICES) fail('ACP_PROTOCOL_INVALID', 'Session model choices must be bounded.');
   const ids = new Set();
   const availableModels = choices.map(choice => {
     const model = ownRecord(choice, 'session model');

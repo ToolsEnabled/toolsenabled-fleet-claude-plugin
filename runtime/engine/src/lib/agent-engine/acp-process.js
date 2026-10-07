@@ -46,7 +46,11 @@ function createAcpProcessTransport({ command, args, cwd, env, launchVariables, r
       try { listener(chunk); } catch { /* A transport observer cannot disrupt process custody. */ }
     }
   });
-  child.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-STDERR_LIMIT); });
+  // What Fleet keeps of the CLI's stderr (quoted when it exits) never holds one of the person's sign-in values.
+  const cleanStderr = launchPolicy.createSignInRedactor(env || process.env);
+  const keepStderr = text => { if (text) stderr = (stderr + text).slice(-STDERR_LIMIT); };
+  child.stderr.on('data', chunk => keepStderr(cleanStderr.push(chunk)));
+  child.stderr.on('end', () => keepStderr(cleanStderr.flush()));
   const deliverExit = () => {
     if (!exit || paused || delivered) return;
     delivered = true;
@@ -60,7 +64,15 @@ function createAcpProcessTransport({ command, args, cwd, env, launchVariables, r
     deliverExit();
   };
   child.once('error', error => noteExit({ error }));
-  child.once('exit', (code, signal) => noteExit({ code, signal }));
+  // The exit record quotes the CLI's last error output, which can arrive just after the exit; it waits for
+  // stderr to end, a second at most.
+  let stderrEnded = false;
+  child.stderr.once('end', () => { stderrEnded = true; });
+  child.once('exit', (code, signal) => {
+    if (stderrEnded) return noteExit({ code, signal });
+    const timer = setTimeout(() => noteExit({ code, signal }), 1000);
+    child.stderr.once('end', () => { clearTimeout(timer); noteExit({ code, signal }); });
+  });
   child.stdin.on('error', error => noteExit({ error }));
   return {
     rootReady,

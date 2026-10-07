@@ -14,7 +14,9 @@ const { real, inside, projectFolder } = require('./project-folder');
 // model call.
 const SUBAGENT_CLIS = Object.freeze({
   claude: Object.freeze({ folder: '.claude', status: Object.freeze(['--setting-sources', '', '--restricted', 'auth', 'status']), signIn: 'claude auth login' }),
-  codex: Object.freeze({ folder: '.codex', status: Object.freeze(['login', 'status']), signIn: 'codex login',
+  // Its status check sees only a saved login, not a key in the environment or a provider in its own
+  // configuration, so a failed check leaves it on with a note instead of turning it off.
+  codex: Object.freeze({ folder: '.codex', status: Object.freeze(['login', 'status']), savedLoginOnly: true, signIn: 'codex login',
     sandbox: Object.freeze({ args: workspace => ['sandbox', '-P', ':workspace', '-C', workspace, '/bin/true'],
       help: 'https://developers.openai.com/codex/concepts/sandboxing#prerequisites' }) }),
   // A CLI that speaks the Agent Client Protocol is checked by starting it the way a subagent starts
@@ -189,9 +191,9 @@ function answersAcp(run, file, args, { env, cwd, deadlineMs = ACP_DEADLINE_MS })
   return result.status === 2 || (result.error && result.error.code === 'ETIMEDOUT') ? 'slow' : 'no';
 }
 // Which installed CLIs are signed in and can run here. The checks run with the
-// environment subagents get: the person's own, without any provider sign-in
-// variable and without the lead session's bindings, and PATH without folders in
-// the project, Fleet's state folder or a temporary folder.
+// environment subagents get: the person's own, with its sign-in variables and
+// without the lead session's bindings, and PATH without folders in the project,
+// Fleet's state folder or a temporary folder.
 function survey(config, { env = process.env, run = spawnSync, workspace = null, acpDeadlineMs = ACP_DEADLINE_MS } = {}) {
   const launch = launchRules();
   const avoid = [config.stateRoot];
@@ -220,7 +222,8 @@ function survey(config, { env = process.env, run = spawnSync, workspace = null, 
       continue;
     }
     const result = run(cli.file, info.status, { env: clean, stdio: 'ignore', timeout: 15000 });
-    if (result.status !== 0) { signedOut.push(cli.name); continue; }
+    if (result.status !== 0 && !info.savedLoginOnly) { signedOut.push(cli.name); continue; }
+    if (result.status !== 0) noLogin.push(cli.name);
     if (info.sandbox && workspace && fs.existsSync(workspace)) {
       const startsSandbox = () => run(cli.file, info.sandbox.args(workspace), { cwd: workspace, env: clean, encoding: 'utf8',
         stdio: ['ignore', 'ignore', 'pipe'], timeout: 20000, maxBuffer: 64 * 1024 });
@@ -233,7 +236,7 @@ function survey(config, { env = process.env, run = spawnSync, workspace = null, 
   return { installed: found.map(cli => cli.name), ready, signedOut, noSandbox, unsupported, slow, noLogin };
 }
 function signInHint(name) {
-  return `${name} is installed, but Fleet found no saved login its subagents can use. Subagents use a CLI's own saved login, not sign-in variables or settings files, so a sign-in kept only in one of those does not count. To use ${name}, run \`${SUBAGENT_CLIS[name].signIn}\` once in a terminal, then run ${SETUP_COMMAND} again.`;
+  return `${name} is installed, but its sign-in check failed the way a subagent starts it. A subagent uses the CLI's own saved login or the sign-in variables in your environment, but not a sign-in kept only in its settings file. To use ${name}, run \`${SUBAGENT_CLIS[name].signIn}\` once in a terminal, then run ${SETUP_COMMAND} again.`;
 }
 function unsupportedHint(name) {
   return `${name} is installed, but its \`${name} ${SUBAGENT_CLIS[name].acp.join(' ')}\` command did not answer the protocol's initialize request, so Fleet cannot start it as a subagent. Update ${name}, then run ${SETUP_COMMAND} again.`;
@@ -242,7 +245,7 @@ function slowHint(name) {
   return `${name} is installed, but its \`${name} ${SUBAGENT_CLIS[name].acp.join(' ')}\` command did not answer the protocol's initialize request in time, twice, so it was left off. Run ${SETUP_COMMAND} again; a busy computer can be slow to start it.`;
 }
 function noLoginHint(name) {
-  return `${name} has no saved login. Its hosted models may refuse a subagent (they can refuse requests that do not come from ${name} itself), so a subagent's first turn can fail. Run \`${SUBAGENT_CLIS[name].signIn}\` once in a terminal, or set up a provider in ${name}'s own configuration.`;
+  return `${name} has no saved login. A subagent can still sign in with a variable in your environment or a provider set up in ${name}'s own configuration; without one, its first turn fails. To sign in, run \`${SUBAGENT_CLIS[name].signIn}\` once in a terminal.`;
 }
 function sandboxHint(name) {
   return `${name} is signed in, but its sandbox cannot start on this computer, so its subagents could not edit files. Follow ${SUBAGENT_CLIS[name].sandbox.help}, then run ${SETUP_COMMAND} again.`;

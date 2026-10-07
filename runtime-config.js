@@ -28,6 +28,13 @@ function resolveConfig(env = process.env, home = os.homedir()) {
 function childEnvironment(env = process.env) {
   return require(path.join(engine, 'src/lib/supervision/launch-environment')).safeLaunchEnvironment(env, { context: 'Fleet helper' });
 }
+// The environment of a Fleet process that starts agent CLIs: the session runtime
+// and setup's sign-in check. It is the person's own, unchanged, so each CLI can
+// sign in as it does in a terminal; that process gives the CLIs everything but
+// session bindings and Fleet's internals, and its own helpers no sign-in variable.
+function launcherEnvironment(env = process.env) {
+  return { ...env };
+}
 function configureEnvironment(config, env = process.env) {
   // Empty optional forwarded variables mean absent, never a relative path.
   for (const name of require('./startup-env.json')) if (env[name] === '') delete env[name];
@@ -40,4 +47,4 @@ function configureEnvironment(config, env = process.env) {
   env.LOCALAPPDATA = config.stateRoot;
   return config;
 }
-module.exports = { engine, absolute, resolveConfig, configureEnvironment, childEnvironment, assertRuntimeMode };
+module.exports = { engine, absolute, resolveConfig, configureEnvironment, childEnvironment, launcherEnvironment, assertRuntimeMode };

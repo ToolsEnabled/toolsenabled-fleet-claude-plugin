@@ -89,9 +89,8 @@ for (const configured of ['', '/private/state with spaces']) {
     expect(calls[1].argv[0]).toBe('node')
     expect(calls[1].argv[1]).toMatch(/\/toolsenabled-fleet\/setup-entry\.js$/)
     expect(calls[1].argv.slice(2)).toEqual(['--setup', workspace])
-    expect(calls[1].init.env.TOOLSENABLED_FLEET_STATE_ROOT).toBe(configured)
-    expect(calls[1].init.env.CLAUDE_CONFIG_DIR).toBe('/private/automation')
-    // Setup accepts only the session's own project, named explicitly.
+    // Setup inherits Claude Code's environment and is told only the session's own project, which it alone accepts.
+    expect(Object.keys(calls[1].init.env)).toEqual(['CLAUDE_PROJECT_DIR'])
     expect(calls[0].init.env.CLAUDE_PROJECT_DIR).toBe(workspace)
     expect(calls[1].init.env.CLAUDE_PROJECT_DIR).toBe(workspace)
   })

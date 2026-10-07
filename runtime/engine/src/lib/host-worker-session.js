@@ -81,8 +81,8 @@ function hostWorkerEntry({ env, config, provider, socketPath, spec, tokenFile })
   };
 }
 // The lead session's bindings (session ids, messaging socket, IDE binding and
-// Fleet's internal variables) and provider sign-in variables are removed from
-// a subagent CLI. One policy, shared with the setup sign-in check:
+// Fleet's internal variables) are removed from a subagent CLI, and the person's
+// own sign-in variables stay. One policy, shared with the setup sign-in check:
 // src/lib/supervision/launch-environment.js. PATH keeps only the folders the
 // CLI itself was looked up in (no project or temporary folder), so a CLI that
 // starts through `#!/usr/bin/env node`, and every helper Codex lists with,
@@ -293,6 +293,54 @@ function codexEvents(onEvent) {
   };
 }
 
+// A CLI's events and errors become reports, tool results and saved state, so the text in them is cleaned of
+// the person's sign-in values first, as its error output is: Fleet keeps and shows none, even if a CLI prints
+// one. Fields that route an event are passed on as they are.
+const ROUTING_FIELDS = new Set(['type', 'status', 'threadId', 'turnId', 'itemId', 'toolCallId', 'sessionId', 'id', 'kind',
+  'role', 'sessionUpdate', 'stopReason', 'code']);
+function withoutSignInValues(onEvent, environment) {
+  if (typeof onEvent !== 'function' || !launchPolicy.signInValues(environment).length) return onEvent;
+  const { clean } = launchPolicy.createSignInRedactor(environment);
+  const plain = value => value !== null && typeof value === 'object'
+    && [Object.prototype, null].includes(Object.getPrototypeOf(value));
+  // Only an event's own top-level fields route it; the same names deeper down (a tool's output) are data. Ids are
+// the CLI's own and are passed on whole: rewriting one would strand the turn it names.
+  const deep = (value, key, top) => typeof value === 'string' ? (top && ROUTING_FIELDS.has(key) ? value : clean(value))
+    : Array.isArray(value) ? value.map(item => deep(item))
+      : plain(value) ? Object.fromEntries(Object.entries(value).map(([name, item]) => [name, deep(item, name)])) : value;
+  return event => onEvent(plain(event)
+    ? Object.fromEntries(Object.entries(event).map(([name, item]) => [name, deep(item, name, true)])) : deep(event));
+}
+function cleanedError(error, clean) {
+  if (error && typeof error === 'object') {
+    for (const name of ['message', 'stack', 'stderr', 'detail']) {
+      try { if (typeof error[name] === 'string') error[name] = clean(error[name]); } catch { /* a read-only field stays */ }
+    }
+  }
+  return error;
+}
+// The same for what a session's own calls, and its adapter's (how Fleet sends a turn), report when they fail:
+// a CLI's error reply to a turn, for example.
+function cleanCall(fn, self, args, clean) {
+  let result;
+  try { result = fn.apply(self, args); } catch (error) { throw cleanedError(error, clean); }
+  return result && typeof result.then === 'function' ? result.then(undefined, error => { throw cleanedError(error, clean); }) : result;
+}
+function withCleanErrors(session, clean) {
+  const wrapped = {};
+  for (const [name, value] of Object.entries(session)) {
+    if (typeof value === 'function') wrapped[name] = (...args) => cleanCall(value, session, args, clean);
+  }
+  if (session.adapter && typeof session.adapter === 'object') {
+    const adapter = session.adapter;
+    wrapped.adapter = new Proxy(adapter, { get(target, name) {
+      const value = Reflect.get(target, name, target);
+      return typeof value === 'function' ? (...args) => cleanCall(value, target, args, clean) : value;
+    } });
+  }
+  return Object.freeze({ ...session, ...wrapped });
+}
+
 // Only the launcher itself may say that it closed a session; an event from a CLI never carries that.
 function fromCli(event) {
   if (!event || typeof event !== 'object' || !Object.hasOwn(event, 'sessionEnded')) return event;
@@ -457,7 +505,14 @@ function createHostWorkerLauncher({ env = process.env, config, workspaceRoot, so
   };
   const { PROVIDER_ORDER } = require('./openshell-worker-providers');
   for (const name of PROVIDER_ORDER) { try { pinnedCli(name); } catch { /* checked again at start */ } }
+  // Every session, and every failure to start one, reaches Fleet with sign-in values cleaned out of its errors.
   async function start(spec) {
+    const { clean } = launchPolicy.createSignInRedactor(cliEnvironment(env, workspaceRoot));
+    let session;
+    try { session = await startSession(spec); } catch (error) { throw cleanedError(error, clean); }
+    return withCleanErrors(session, clean);
+  }
+  async function startSession(spec) {
     requireEnabled(config, env);
     if (!PROVIDER_ORDER.includes(spec.provider)) throw refusal('HOST_WORKER_PROVIDER_UNSUPPORTED', 'Choose a listed worker provider.');
     checkNative();
@@ -470,7 +525,9 @@ function createHostWorkerLauncher({ env = process.env, config, workspaceRoot, so
     const tokenFile = path.join(spec.nodeFolder, 'link-token');
     const entry = hostWorkerEntry({ env, config, provider: spec.provider, socketPath, spec, tokenFile });
     writePrivate(tokenFile, `${spec.linkToken}\n`, config.stateRoot);
-    const common = { cwd: workspaceRoot, env: cliEnvironment(env, workspaceRoot), onEvent: spec.onEvent, containProcessTree: true,
+    const cliEnv = cliEnvironment(env, workspaceRoot);
+    const onEvent = withoutSignInValues(spec.onEvent, cliEnv);
+    const common = { cwd: workspaceRoot, env: cliEnv, onEvent, containProcessTree: true,
       ...(command ? { command } : {}) };
     const cli = require('./subagent-clis').subagentCli(spec.provider);
     if (cli && cli.kind === 'acp') {
@@ -510,7 +567,7 @@ function createHostWorkerLauncher({ env = process.env, config, workspaceRoot, so
         const problem = profile.confirm({ config: resolved, agent, skills, serverName: prepared.serverName });
         if (problem) throw unconfined(problem);
       }
-      const events = acpEvents(spec.onEvent, prepared.toolNamePrefix);
+      const events = acpEvents(onEvent, prepared.toolNamePrefix);
       const options = { ...common, provider: spec.provider, profile, args: prepared.args,
         env: withoutOverrides, profileEnv: prepared.env, mcpServers: acpMcpServers(prepared.serverName, entry),
         onEvent: events.onEvent, ...(spec.model && spec.model !== 'auto' ? { model: spec.model } : {}) };
@@ -530,7 +587,7 @@ function createHostWorkerLauncher({ env = process.env, config, workspaceRoot, so
       return Object.freeze({ ...session, apiMode, turnCompletion: 'event', standingRulesDelivered: false });
     }
     if (spec.provider === 'codex') {
-      const events = codexEvents(spec.onEvent);
+      const events = codexEvents(onEvent);
       const beforeThread = async adapter => {
         if (spec.threadId) {
           let saved;
@@ -626,7 +683,7 @@ function createHostWorkerLauncher({ env = process.env, config, workspaceRoot, so
     writePrivate(settings,
       JSON.stringify(require('./claude-workspace-file-tools').settings(SERVER_NAME,
         { workspaceRoot, pathDirectories: String(env.PATH || '').split(path.delimiter) })) + '\n', config.stateRoot);
-    const options = { ...common, onEvent: claudeEvents(spec.onEvent, { workspaceRoot }),
+    const options = { ...common, onEvent: claudeEvents(onEvent, { workspaceRoot }),
       threadOptions: { ...(spec.model ? { model: spec.model } : {}), ...(spec.effort ? { effort: spec.effort } : {}) },
       // Standard replaces saved permission sources with exact workspace file rules.
       plan: { mcpConfig, settings,

@@ -112,7 +112,9 @@ function pruneStderrFiles(directory) {
    session must not fail to start because its diagnostic log could not be
    opened. runtime is required lazily so a caller that only wants the transport
    shape does not pull the state-root resolution in. */
-function durableStderrSink(childPid) {
+function durableStderrSink(childPid, { environment = null } = {}) {
+  // The person's sign-in values never reach the log, even if the CLI prints one (see createSignInRedactor).
+  const redactor = require('../supervision/launch-environment').createSignInRedactor(environment);
   try {
     const { rootPath, ensureDir } = require('../runtime');
     const directory = rootPath('logs');
@@ -125,7 +127,7 @@ function durableStderrSink(childPid) {
     try { pruneStderrFiles(directory); } catch { /* pruning is housekeeping, not the point */ }
     return (chunk) => {
       if (written >= STDERR_FILE_LIMIT) return;
-      const text = String(chunk);
+      const text = redactor.clean(String(chunk));
       const room = STDERR_FILE_LIMIT - written;
       /* `>=` rather than `>`, so a chunk that lands exactly on the cap still
          says the log is full. Without it the last chunk fits, nothing is
@@ -147,9 +149,9 @@ function durableStderrSink(childPid) {
  *
  * `env === undefined` means the ambient environment, never a raw inherit: the
  * same policy applies either way. The lead session's bindings (session ids,
- * messaging socket, IDE binding, Fleet's internal variables) and every provider
- * sign-in variable are removed, by the one function the setup sign-in check also
- * uses (agentCliEnvironment).
+ * messaging socket, IDE binding, Fleet's internal variables) are removed and the
+ * person's own sign-in variables stay, by the one function the setup sign-in check
+ * also uses (agentCliEnvironment).
  *
  * PATH SURVIVES, and must: it is how `claude` is found at all. */
 function launchEnvironment(env) {
@@ -565,11 +567,16 @@ function createClaudeCliTransport({
   /* The durable copy. See durableStderrSink(): the in-memory buffer below is
      still the caller's, and this is the one that survives an app that dies
      without running its shutdown. */
-  const sink = stderrSink(child.pid);
-  child.stderr.on('data', chunk => {
-    stderr = appendBounded(stderr, chunk);
-    if (sink) sink(chunk);
-  });
+  const sink = stderrSink(child.pid, { environment: childEnv });
+  // What Fleet keeps of the CLI's stderr, in memory and in the log, never holds one of the person's sign-in values.
+  const cleanStderr = require('../supervision/launch-environment').createSignInRedactor(childEnv);
+  const keepStderr = text => {
+    if (!text) return;
+    stderr = appendBounded(stderr, text);
+    if (sink) sink(text);
+  };
+  child.stderr.on('data', chunk => keepStderr(cleanStderr.push(chunk)));
+  child.stderr.on('end', () => keepStderr(cleanStderr.flush()));
 
   function pauseSource() {
     if (paused) return;

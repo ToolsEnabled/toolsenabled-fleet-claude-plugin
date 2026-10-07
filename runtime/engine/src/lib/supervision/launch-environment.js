@@ -3,16 +3,17 @@
 // Dependency-light child environment policy, in two parts.
 //
 // AN AGENT CLI (Claude Code, Codex or OpenCode) THAT FLEET STARTS AS A SUBAGENT
-// signs in by its own saved login, exactly as it would from the person's
-// terminal. Fleet never carries a provider key, token or endpoint, so the
-// provider sign-in variables (API keys, Bedrock, Vertex, Foundry, AWS and the
-// like) and every variable whose name says it holds a credential are removed,
-// and so is what binds a process to the lead session that started Fleet: its
-// session ids, messaging socket, host sign-in refresh, IDE binding and Fleet's
-// own internal variables. Sign-in locations such as CLAUDE_CONFIG_DIR and
-// CODEX_HOME are kept, so each CLI finds its own saved login.
-// agentCliEnvironment() is that environment; the plugin's setup sign-in check
-// uses the same function, so setup and subagents see one environment.
+// signs in exactly as it does from the person's terminal: by its own saved
+// login, or by the sign-in variables the person set for it (an API key or token,
+// a cloud provider's variables, a gateway). Fleet leaves those in place and
+// never reads, writes, stores or logs them; restricting a CLI's built-in sign-in
+// methods is not Fleet's to do. What is removed is what binds a process to the
+// lead session that started Fleet (its session ids, messaging socket, the host's
+// sign-in refresh, IDE binding) and Fleet's own internal variables, and the
+// variables a CLI reads inline configuration from, which would replace the
+// configuration Fleet generates (a launch sets its own). agentCliEnvironment() is
+// that environment; the plugin's setup sign-in check uses the same function, so
+// setup and subagents see one environment.
 //
 // EVERY OTHER HELPER PROCESS (process listings, audit file inspection, host
 // commands) needs no provider credential, so safeLaunchEnvironment() removes
@@ -63,8 +64,8 @@ const ENVIRONMENT_RULES = Object.freeze([
   ['GROK_CLI_CHAT_PROXY_BASE_URL', 'grok', true],
   ['GROK_AUTH_TOKEN', 'grok', true],
   ['OPENCODE_API_KEY', 'opencode', true],
-  ['OPENCODE_AUTH_TOKEN', 'opencode', true],
-  ['OPENCODE_BASE_URL', 'opencode', true],
+  ['OPENCODE_AUTH_CONTENT', 'opencode', true],
+  ['OPENCODE_CONSOLE_TOKEN', 'opencode', true],
   ['AWS_PROFILE', 'claude', false],
   ['AWS_REGION', 'claude', false],
   ['AWS_DEFAULT_REGION', 'claude', false],
@@ -105,7 +106,7 @@ function invalidEnvironment(baseEnvironment) {
 // terminal multiplexer and agent sockets. A subagent is its own CLI session on
 // its own sign-in, so none of them are passed on. Sign-in locations such as
 // CLAUDE_CONFIG_DIR and CODEX_HOME are kept, so each CLI finds its own saved
-// login; provider sign-in variables are removed (agentCliEnvironment below).
+// login, and so are the person's own sign-in variables (agentCliEnvironment below).
 const LEAD_SESSION_ENV = Object.freeze(new Set([
   'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CODE_HOST_SESSION_ID',
   'CLAUDE_CODE_REMOTE_SESSION_ID', 'CLAUDE_CODE_BRIDGE_SESSION_ID', 'CLAUDE_CODE_CLOUD_SESSION_ID',
@@ -140,14 +141,14 @@ function leadSessionBinding(name) {
 // KEYBOARD_LAYOUT does not. A subagent has no use for any of them.
 const CREDENTIAL_LIKE_NAME = /(?:^|_)(?:API_?KEY|AUTH_?TOKEN|ACCESS_?TOKEN|OAUTH_?TOKEN|BEARER_?TOKEN|SESSION_?TOKEN|SECRET_?(?:ACCESS_?)?KEY|PRIVATE_?KEY|TOKENS?|KEYS?|SECRETS?|PASSWORDS?|PASSWD|PASSPHRASES?|CREDENTIALS?)(?:_|$)/i;
 
-/* The environment an agent CLI gets: the person's own, without the lead
-   session's bindings and without any provider sign-in variable, so Fleet never
-   carries a key, token or endpoint and each CLI signs in by its own saved login.
-   A new object; the caller's is never changed. */
+/* The environment an agent CLI gets: the person's own, as their terminal gives it, without the lead
+   session's bindings, Fleet's own variables and a CLI's inline configuration variables (inProviderFamily).
+   Every sign-in variable stays, so each CLI can use every sign-in method it has. A new object; the caller's
+   is never changed. */
 function agentCliEnvironment(baseEnvironment = process.env) {
   invalidEnvironment(baseEnvironment);
-  const environment = withoutCredentialLikeNames(credentialFreeEnvironment(baseEnvironment));
-  envScrub.deleteEnvMatching(environment, leadSessionBinding);
+  const environment = { ...baseEnvironment };
+  envScrub.deleteEnvMatching(environment, name => leadSessionBinding(name) || inProviderFamily(name));
   return environment;
 }
 
@@ -155,14 +156,20 @@ function agentCliEnvironment(baseEnvironment = process.env) {
    sign-in check calls. */
 const subscriptionLaunchEnvironment = agentCliEnvironment;
 
-// The variables a CLI reads its own configuration or sign-ins from, by family. A CLI whose switches can carry inline
-// configuration or a sign-in (OpenCode reads a great many from OPENCODE_*: inline sign-in and configuration,
-// permissions, server logins, experimental tools) has its whole family removed from every other process; a launch
-// of that CLI sets the few it needs itself, after this removal. One table: the launcher's check of a started
-// process reads the same family (environmentFamily).
-const ENVIRONMENT_FAMILIES = Object.freeze([['OPENCODE_', 'opencode']]
-  .map(([prefix, provider]) => Object.freeze({ prefix, provider })));
+// The variables a CLI reads its own configuration from, by family. A CLI whose switches can carry inline
+// configuration, permissions or tools (OpenCode reads a great many from OPENCODE_*) has its whole family
+// removed from every other process, except the ones that are sign-in methods of that CLI, which an agent CLI
+// keeps like any other sign-in variable; a launch of that CLI sets the few switches it needs itself, after this
+// removal. One table: the launcher's check of a started process reads the same family (environmentFamily).
+const ENVIRONMENT_FAMILIES = Object.freeze([['OPENCODE_', 'opencode',
+  ['OPENCODE_API_KEY', 'OPENCODE_AUTH_CONTENT', 'OPENCODE_CONSOLE_TOKEN', 'OPENCODE_GITLAB_AUTH_CLIENT_ID']]]
+  .map(([prefix, provider, signIn]) => Object.freeze({ prefix, provider, signIn: Object.freeze(signIn) })));
 function inProviderFamily(name) {
+  const upper = String(name).toUpperCase();
+  return ENVIRONMENT_FAMILIES.some(family => upper.startsWith(family.prefix) && !family.signIn.includes(upper));
+}
+// Fleet's own helper processes lose the whole family, sign-in variables included.
+function inWholeFamily(name) {
   const upper = String(name).toUpperCase();
   return ENVIRONMENT_FAMILIES.some(family => upper.startsWith(family.prefix));
 }
@@ -182,8 +189,98 @@ function credentialFreeEnvironment(baseEnvironment = process.env) {
       { ...environment }, PROVIDER_ENVIRONMENT_NAMES[providerId]
     );
   }
-  envScrub.deleteEnvMatching(environment, inProviderFamily);
+  envScrub.deleteEnvMatching(environment, inWholeFamily);
   return environment;
+}
+
+/* THE SECRET VALUES AMONG THE PERSON'S SIGN-IN VARIABLES, longest first. An agent CLI gets them, so anything
+   Fleet records from a CLI (its stderr, its messages and errors, kept in logs, reports and state) is cleaned of
+   them first: Fleet never writes a sign-in secret, even when a CLI prints one. A secret is the value of a name
+   that says it holds a key, token, secret, password or credentials, of a CLI's own sign-in variable, or of a
+   header list that carries a sign-in. Settings that only choose a provider, region, profile or address are not
+   secrets and are left alone, so a report can still name them; so are values shorter than three characters. */
+const SECRET_HOLDERS = Object.freeze(['ANTHROPIC_CUSTOM_HEADERS']);
+// A header list's secrets are also the values of its sign-in headers (Authorization, a cookie, or a name that
+// says key, token, secret or the like), with and without their scheme word ("Bearer"); other headers are not.
+function headerSecrets(list) {
+  return String(list).split(/\r?\n/).flatMap(line => {
+    if (!line.includes(':')) return [];
+    const name = line.slice(0, line.indexOf(':')).trim();
+    const value = line.slice(line.indexOf(':') + 1).trim();
+    const signIn = /^(?:proxy-)?authorization$|cookie/i.test(name) || CREDENTIAL_LIKE_NAME.test(name.replace(/-/g, '_'));
+    return signIn ? [value, value.replace(/^[A-Za-z-]+\s+/, '')] : [];
+  });
+}
+function signInValues(environment) {
+  const familySignIn = new Set(ENVIRONMENT_FAMILIES.flatMap(family => family.signIn));
+  const values = new Set();
+  for (const [name, value] of Object.entries(environment && typeof environment === 'object' ? environment : {})) {
+    const upper = String(name).toUpperCase();
+    if (typeof value !== 'string' || value.length < 3) continue;
+    const holder = SECRET_HOLDERS.includes(upper);
+    if (!holder && !familySignIn.has(upper) && !CREDENTIAL_LIKE_NAME.test(String(name))) continue;
+    for (const secret of [value, ...(holder ? headerSecrets(value) : [])]) if (secret.length >= 3) values.add(secret);
+  }
+  return [...values].sort((a, b) => b.length - a.length);
+}
+const SIGN_IN_VALUE_REMOVED = '[sign-in value removed]';
+/* Cleans a stream of text of those values. A value split across two chunks is still found: the end of a chunk
+   that could be the start of a value is held back until the next chunk shows whether it is, or until flush();
+   everything else is passed on at once. A value that the marker itself contains is removed without a marker,
+   so no marker can put it back. */
+const MARKERS = Object.freeze([SIGN_IN_VALUE_REMOVED, '[removed]', '\u2588\u2588\u2588']);
+const TEXT_WITHHELD = '[text withheld: it held a sign-in value]';
+function createSignInRedactor(environment) {
+  const values = signInValues(environment);
+  const marker = MARKERS.find(candidate => !values.some(value => candidate.includes(value))) || '';
+  const withheld = [TEXT_WITHHELD, '[withheld]'].find(candidate => !values.some(value => candidate.includes(value))) || '';
+  const present = text => values.some(value => text.includes(value));
+  // Removing one value can join text into another, so cleaning repeats until none is left; text that never
+  // settles is withheld whole.
+  const clean = input => {
+    let text = String(input);
+    for (let round = 0; round < 8 && present(text); round += 1) {
+      text = values.reduce((out, value) => out.split(value).join(marker), text);
+    }
+    return present(text) ? withheld : text;
+  };
+  // For each value, how far its own start repeats inside it (Knuth-Morris-Pratt), so the longest end of a text
+  // that starts a value is found in one pass over the text's last characters.
+  const fallbacks = values.map(value => {
+    const table = new Array(value.length).fill(0);
+    for (let i = 1, k = 0; i < value.length; i += 1) {
+      while (k > 0 && value[i] !== value[k]) k = table[k - 1];
+      if (value[i] === value[k]) k += 1;
+      table[i] = k;
+    }
+    return table;
+  });
+  const startOfValue = text => {
+    let longest = 0;
+    values.forEach((value, index) => {
+      const table = fallbacks[index];
+      let k = 0;
+      for (let i = Math.max(0, text.length - (value.length - 1)); i < text.length; i += 1) {
+        while (k > 0 && text[i] !== value[k]) k = table[k - 1];
+        if (text[i] === value[k]) k += 1;
+        if (k === value.length) k = table[k - 1];
+      }
+      if (k > longest) longest = k;
+    });
+    return longest;
+  };
+  let pending = '';
+  return Object.freeze({
+    clean,
+    push(chunk) {
+      pending = clean(pending + String(chunk));
+      const held = pending.length ? startOfValue(pending) : 0;
+      const out = pending.slice(0, pending.length - held);
+      pending = pending.slice(pending.length - held);
+      return out;
+    },
+    flush() { const out = clean(pending); pending = ''; return out; }
+  });
 }
 
 /* Also without any name that says it holds a key or token. */
@@ -357,11 +454,13 @@ module.exports = Object.freeze({
   assertAgentCliPath,
   confinedAgentCliEnvironment,
   assertNoBillingCredentials,
+  createSignInRedactor,
   credentialFreeEnvironment,
   environmentFamily,
   leadSessionBinding,
   resolveAgentCli,
   safeLaunchEnvironment,
+  signInValues,
   subagentWritableRoots,
   subscriptionLaunchEnvironment
 });

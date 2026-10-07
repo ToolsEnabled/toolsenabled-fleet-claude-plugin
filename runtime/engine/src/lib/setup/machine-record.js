@@ -631,7 +631,8 @@ function runtimeGuardFlags(nodePath, {
   let accepted = [];
   try {
     const result = spawn(nodePath, [...flags, '-e', '0'], {
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      env: require('../supervision/launch-environment').safeLaunchEnvironment(
+        { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, { context: 'runtime guard probe' }),
       timeout: RUNTIME_GUARD_PROBE_TIMEOUT_MS,
       windowsHide: true,
       stdio: 'ignore'

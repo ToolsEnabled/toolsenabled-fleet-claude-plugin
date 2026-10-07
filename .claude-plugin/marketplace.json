@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "ToolsEnabled Fleet: subagents, a shared task list, a ledger of rules and project memory.",
-    "version": "1.10.1"
+    "version": "1.11.0"
   },
   "plugins": [
     {

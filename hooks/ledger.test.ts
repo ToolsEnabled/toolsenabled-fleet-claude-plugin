@@ -37,8 +37,8 @@ test('ledger opens focused with real-client Escape close contract and setup guid
   expect(w.opened[0].focus).toBe(true)
   expect(w.calls.length).toBe(1)
   expect(w.calls[0].argv[1]).toMatch(/\/toolsenabled-fleet\/ledger-entry\.js$/)
-  expect(w.calls[0].init.env.TOOLSENABLED_FLEET_STATE_ROOT).toBe('/private/test state')
-  expect(w.calls[0].init.env.SSL_CERT_FILE).toBe('/private/ca.pem')
+  // The reader inherits Claude Code's environment; the mod sets nothing in it.
+  expect(w.calls[0].init.env).toBeUndefined()
   await press($, 'ledger-close')
   expect(w.closed.length).toBe(1)
 })

@@ -217,12 +217,17 @@ function createCodexProcessTransport({
     }
   });
 
-  child.stderr.on('data', chunk => {
-    stderrBuffer = appendBounded(stderrBuffer, chunk, STDERR_LIMIT);
+  // What Fleet keeps or passes on of the CLI's stderr never holds one of the person's sign-in values.
+  const cleanStderr = require('../supervision/launch-environment').createSignInRedactor(env === undefined ? process.env : env);
+  const keepStderr = text => {
+    if (!text) return;
+    stderrBuffer = appendBounded(stderrBuffer, text, STDERR_LIMIT);
     for (const listener of stderrListeners) {
-      try { listener(chunk); } catch { /* A stderr observer cannot disrupt the child process. */ }
+      try { listener(text); } catch { /* A stderr observer cannot disrupt the child process. */ }
     }
-  });
+  };
+  child.stderr.on('data', chunk => keepStderr(cleanStderr.push(chunk)));
+  child.stderr.on('end', () => keepStderr(cleanStderr.flush()));
 
   function notifyExit({ code = null, signal = null, error = null } = {}) {
     if (exitInfo) return;
@@ -239,7 +244,15 @@ function createCodexProcessTransport({
   }
 
   child.once('error', error => notifyExit({ error }));
-  child.once('exit', (code, signal) => notifyExit({ code, signal }));
+  // The exit record quotes the CLI's last error output, which can arrive just after the exit; it waits for
+  // stderr to end, a second at most.
+  let stderrEnded = false;
+  child.stderr.once('end', () => { stderrEnded = true; });
+  child.once('exit', (code, signal) => {
+    if (stderrEnded) return notifyExit({ code, signal });
+    const timer = setTimeout(() => notifyExit({ code, signal }), 1000);
+    child.stderr.once('end', () => { clearTimeout(timer); notifyExit({ code, signal }); });
+  });
   child.stdin.on('error', error => notifyExit({ error }));
 
   return {
