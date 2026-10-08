@@ -6,8 +6,8 @@ text controls the permissions and conditions for this distribution.
 
 The runtime ships inside the ToolsEnabled Fleet plugin with its local
 documentation. It does not contain a hosted service, agent CLI packages or
-credentials. The agent CLIs Fleet starts, claude and codex, are installed
-separately by the user.
+credentials. The agent CLIs Fleet starts, claude, codex and opencode, are
+installed separately by the user.
 
 The runtime declares no production npm dependencies. See
 THIRD-PARTY-LICENSES.md for the dependency inventory.

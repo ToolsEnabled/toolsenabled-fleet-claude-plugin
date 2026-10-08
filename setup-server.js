@@ -2,7 +2,7 @@
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { launcherEnvironment } = require('./runtime-config');
-const VERSION = '1.11.1';
+const VERSION = '1.11.2';
 const PROTOCOLS = Object.freeze(['2024-11-05', '2025-03-26', '2025-06-18']);
 const guidance = 'Fleet is installed but not set up for this project. Type /tefleet setup (or ask Claude to set up Fleet) and approve the setup tool. Fleet\'s tools then appear in this session.';
 // Fleet works in one project at a time; from any other project it offers to move.
@@ -16,7 +16,7 @@ const statusTool = Object.freeze({
   name: 'fleet_setup_status', title: 'Fleet setup status',
   description: 'Report that Fleet is not set up for this project yet and how to set it up. Changes nothing.',
   inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: { title: 'Fleet setup status', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 });
 const setupTool = Object.freeze({
   name: 'fleet_setup', title: 'Set up Fleet for a project',
@@ -30,7 +30,7 @@ const setupTool = Object.freeze({
     },
     required: ['workspace'], additionalProperties: false,
   },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: { title: 'Set up Fleet for a project', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 });
 
 function text(value, isError = false) {

@@ -4,7 +4,7 @@
 // (src/mcp-server.js sessionInstructions). The tool descriptions themselves are
 // the registry's own (src/lib/tool-registry.js); this note covers what no
 // single tool says.
-const SUBAGENT_WARNING = 'Subagents are experimental. They run as your user, confined to the project folder with network off and approvals never. An action needing a new permission is declined.';
+const SUBAGENT_WARNING = 'Subagents are experimental. They run as your user, confined to the project folder, with no shell or web tools of their own and approvals never. An action needing a new permission is declined.';
 
 function briefToolSummary({ tier, allowedNames } = {}) {
   const offered = name => allowedNames.includes(name);
@@ -14,11 +14,11 @@ function briefToolSummary({ tier, allowedNames } = {}) {
       : `Subagents: on, at the ${tier} permission level. ${SUBAGENT_WARNING}`
     : 'Subagents: off. The person turns them on with /tefleet setup once an agent CLI is installed and signed in.';
   return { enabled: true, text: [
-    'ToolsEnabled Fleet for this project: subagents, a ledger the person reads, a shared task queue and project memory.',
+    'ToolsEnabled Fleet: subagents, a ledger the person reads, a shared task queue and memory, for when the person asks for them.',
     'Tool descriptions name Fleet tools by id, such as agent.wait; your client may show the dot as an underscore.',
     'Fleet runs with your own permissions and network. It is not a sandbox, and it does not store the agent CLIs\' sign-ins.',
     subagents,
-    'Use the ledger (ledger.read, t_ledger.*, a_ledger.file) for tasks and questions the person sees with /tefleet ledger, task.* for work any agent can claim, and memory.* for notes every agent in the project can read.',
+    'When the work calls for it: the ledger (ledger.read, t_ledger.*, a_ledger.file) holds tasks and questions the person sees with /tefleet ledger, task.* holds work any agent can claim, and memory.* holds notes every agent Fleet starts can read. Memory and the ledger stay with Fleet when it moves to another project.',
     ...(offered('host.read_file')
       ? ['Use host.read_file before host.write_file or host.patch_file for coordinated edits. Shell and native file edits do not participate in this coordination.']
       : []),

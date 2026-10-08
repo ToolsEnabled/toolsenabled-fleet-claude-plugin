@@ -144,8 +144,9 @@ function ruleLines(rules) {
     if (cut) shortened += 1;
   }
   const notes = [];
-  if (rules.length > lines.length) notes.push(`(${rules.length - lines.length} more standing rule${rules.length - lines.length === 1 ? ' is' : 's are'} not shown here; read ${rules.length - lines.length === 1 ? 'it' : 'them'} with Fleet's ledger.read tool and follow ${rules.length - lines.length === 1 ? 'it' : 'them'} too.)`);
-  if (shortened) notes.push(`(Rules marked [cut] are longer than shown; read their full words with Fleet's ledger.read tool.)`);
+  // Rules are delivered here, never fetched: the rest are the person's to see, not instructions to look up.
+  if (rules.length > lines.length) notes.push(`(${rules.length - lines.length} more standing rule${rules.length - lines.length === 1 ? ' is' : 's are'} not shown here; the person sees every rule with /tefleet ledger.)`);
+  if (shortened) notes.push('(Rules marked [cut] are longer than shown; the person sees their full words with /tefleet ledger.)');
   return { lines, notes, shown: new Set(lines.map(line => line.slice(2, line.indexOf(':')))) };
 }
 // The person's standing rules, as context for a Claude session.

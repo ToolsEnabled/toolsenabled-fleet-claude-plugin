@@ -6,7 +6,7 @@ Fleet is a plugin that runs in Claude Code on Linux x86_64. It gives your Claude
 
 - Linux x86_64 (for example Ubuntu or Debian). macOS and Windows are not supported.
 - Claude Code, in the terminal or the Code tab of the Claude desktop app. Fleet works only in Claude Code; other Claude surfaces do not run it.
-- Node.js 22.19 or newer on your PATH, not inside your project or a temporary folder (Fleet refuses to run under one there), and Python 3 at `/usr/bin/python3`.
+- Node.js 22.19 or newer on your PATH, not inside your project or a temporary folder (Fleet refuses to run under one there), and Python 3 at `/usr/bin/python3`. Keep Node.js on a current release of its line: newer 22.x releases carry security fixes.
 - A project folder inside your home folder.
 - For subagents: Linux 5.3 or newer, plus at least one supported agent CLI installed on this computer: Claude Code (`claude`), Codex (`codex`) or OpenCode (`opencode`). Fleet starts each one it finds on your PATH, and setup turns on only the ones that pass its checks (see [Set up](#set-up)). A subagent gets its answers through the CLI's own saved login or provider configuration (see [Sign-ins and environment](#sign-ins-and-environment)).
 - For the `/fleet` and `/ledger` panes: Claude Code 2.1.287 or newer in a terminal. Fleet's tools and commands work in the desktop app; the panes are tested in the terminal. Where the panes do not load, Fleet's tools and `/tefleet` commands still work.
@@ -59,7 +59,7 @@ These are handled by a small hook from the plugin, without sending your words to
 
 Fleet applies `/tefleet ledger`, `/tefleet settings` and `/tefleet confirm` changes at once when Claude Code reports that you typed the command at its prompt. If the hook cannot tell (for example a prompt sent by a scheduled task, `/loop` or another session), Fleet changes nothing and shows you a six-digit code. Type `/tefleet confirm <code>` within 5 minutes, in the same session, to make the change, or ignore it. Showing the ledger or settings needs no code.
 
-These checks rely on Claude Code telling Fleet's hooks where a prompt came from, which Claude Code does not promise, and on the hooks running: if `node` is missing or a hook times out, the check does not run. Claude cannot schedule or forward a `/tefleet` command: Fleet refuses CronCreate, CronUpdate, ScheduleWakeup, RemoteTrigger and SendMessage calls that carry one.
+These checks rely on Claude Code telling Fleet's hooks where a prompt came from, which Claude Code does not promise, and on the hooks running: if `node` is missing or a hook times out, the check does not run. Claude cannot schedule or forward a `/tefleet` command: Fleet refuses CronCreate, CronUpdate, ScheduleWakeup, RemoteTrigger and SendMessage calls whose prompt begins with one (Claude Code runs a command only from the start of a prompt); text that only mentions or quotes a command goes through.
 
 The hook reads each prompt only to recognize `/tefleet ledger`, `/tefleet settings` and `/tefleet confirm`. It keeps nothing else, except a change waiting for your code, with only a digest of the code, for 5 minutes (in Claude Code's plugin data folder or Fleet's state folder).
 
@@ -77,7 +77,7 @@ The hook reads each prompt only to recognize `/tefleet ledger`, `/tefleet settin
 
 - **Runs:**
   - A local MCP server from this plugin's folder, started with the `node` on your PATH.
-  - Two hooks. `ledger-hook.js` handles `/tefleet ledger`, `/tefleet settings` and `/tefleet confirm` and gives each new session in Fleet's project your standing rules. `schedule-guard.js` reads CronCreate, CronUpdate, ScheduleWakeup, RemoteTrigger and SendMessage calls only to refuse a `/tefleet` command in them, and keeps nothing.
+  - Two hooks. `ledger-hook.js` handles `/tefleet ledger`, `/tefleet settings` and `/tefleet confirm` and gives each new session in Fleet's project your standing rules. `schedule-guard.js` reads CronCreate, CronUpdate, ScheduleWakeup, RemoteTrigger and SendMessage calls only to refuse one whose prompt begins with a `/tefleet` command, and keeps nothing.
   - Small Python helpers from the same folder for process control and, with audit on, the audit key.
   - During setup, each supported agent CLI's own sign-in status command and, where the CLI has its own sandbox, a command that starts that sandbox around `/bin/true` in the project (the table under [Permissions Fleet gives subagents](#permissions-fleet-gives-subagents) lists them). Fleet uses only whether they succeed and whether a sandbox reported that it could not start. These checks run again after an update and when you change providers or models.
   - The panes start `tree-entry.js` and `ledger-entry.js`, and the setup pane and setup tool start `setup-entry.js`, all from this plugin's folder. On Claude Code 2.1.287 and newer in a terminal, the plugin also loads in-process code that draws the panes and a one-line status above the prompt.
@@ -112,7 +112,7 @@ Fleet sets the permissions for the subagents it starts. The plugin always runs a
 
 - **Files:** a subagent reads and changes files inside the project folder only. It cannot write anywhere else, including `/tmp` and `$TMPDIR`.
 - **Protected paths,** denied at any depth: version-control folders, CI workflows, editor and dev-container settings, package manifests and task-runner files (such as `package.json`, `Makefile` and `pyproject.toml`), build files that run code (such as `setup.py`, `build.gradle`, `Cargo.toml`, `Gemfile` and `CMakeLists.txt`), agent instruction files such as `CLAUDE.md` and `AGENTS.md`, package-manager and interpreter startup files, project folders on your PATH, agent configuration and credential files. Common credential files in the project (`.npmrc`, `.netrc`, SSH keys, `.docker`, `.aws`, names containing `credential` and the like) cannot be read; this is a list of names, so a secret kept under another name is not covered.
-- **No shell, no network, no approvals:** a subagent has no shell and no network access, and an action that would need your approval is refused, because a background subagent cannot show you a prompt. The refusal names what was denied; you can do that action yourself in your own session.
+- **No shell, no web tools, no approvals:** a subagent has no shell and no web or network tools of its own (the table below says how each CLI is confined), and an action that would need your approval is refused, because a background subagent cannot show you a prompt. The refusal names what was denied; you can do that action yourself in your own session.
 - **Fleet's tools:** subagents get Fleet's coordination tools, such as subagents, messages, tasks, the ledger and memory. The CLIs' own subagent tools, web search and image generation are off, so a subagent starts further subagents only through Fleet, within your depth, width and model limits.
 - **PATH:** subagents and the programs Fleet runs for them get your PATH without folders inside the project or temporary folders, so a subagent does not find programs in an activated virtualenv inside the project.
 - Changing `/permissions` in your own session does not widen a subagent.
@@ -200,6 +200,6 @@ Close sessions that use Fleet, then uninstall the plugin from Claude Code. To de
 
 ## Privacy, support and license
 
-[Privacy](https://github.com/ToolsEnabled/toolsenabled-fleet-claude-plugin/blob/main/PRIVACY.md) · Support: support@toolsenabled.ai or [GitHub issues](https://github.com/ToolsEnabled/toolsenabled-fleet-claude-plugin/issues) · MIT licensed ([LICENSE](https://github.com/ToolsEnabled/toolsenabled-fleet-claude-plugin/blob/main/LICENSE)).
+[Privacy](https://github.com/ToolsEnabled/toolsenabled-fleet-claude-plugin/blob/main/PRIVACY.md) · [Security and safe harbor](https://github.com/ToolsEnabled/toolsenabled-fleet-claude-plugin/blob/main/SECURITY.md) · Support: support@toolsenabled.ai or [GitHub issues](https://github.com/ToolsEnabled/toolsenabled-fleet-claude-plugin/issues) · MIT licensed ([LICENSE](https://github.com/ToolsEnabled/toolsenabled-fleet-claude-plugin/blob/main/LICENSE)).
 
 ToolsEnabled is not affiliated with or endorsed by Anthropic, OpenAI or any other AI provider. Product names are used only to say which tools Fleet works with.

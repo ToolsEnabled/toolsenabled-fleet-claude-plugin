@@ -129,6 +129,17 @@ function readHostConfig(stateRoot, { allowPluginRebind = false, setupKind = null
       && !allowPluginRebind) {
     refuse('HOST_PLUGIN_REBIND_REQUIRED', 'Fleet plugin changed. Run /tefleet setup again in this project.');
   }
+  // A rebind replaces the plugin folder in both files. A record still naming
+  // another one is rebound the same way; an unreadable record is left to
+  // serveHost, which refuses it.
+  if (config.setupKind === 'plugin' && !allowPluginRebind) {
+    let record = null;
+    try { record = require('./setup/machine-record').readMachineRecord({ servicesRoot: path.join(stateRoot, 'services'), adopt: false }); }
+    catch { record = null; }
+    if (record && record.installRoot !== INSTALL_ROOT) {
+      refuse('HOST_PLUGIN_REBIND_REQUIRED', 'Fleet plugin changed. Run /tefleet setup again in this project.');
+    }
+  }
   if ((!allowPluginRebind || config.setupKind !== 'plugin')
       && (fs.realpathSync(config.installRoot) !== fs.realpathSync(INSTALL_ROOT)
       || fs.realpathSync(config.nodePath) !== fs.realpathSync(process.execPath))) {
@@ -271,6 +282,43 @@ function detectedProviderClis(env = process.env, workspace = null) {
   return SUBAGENT_PROVIDERS.filter(name => resolveAgentCli(name, { env, workspace }) !== null);
 }
 
+// One plugin setup at a time per state folder. After a plugin update Fleet's
+// server and its session hook both rebind at once, and one must not remove the
+// other's new host-mode.json or put back a record the other just replaced.
+// An exclusive create, never a hard link: the state check refuses linked files.
+const SETUP_LOCK_WAIT_MS = 20000;
+const SETUP_LOCK_ABANDONED_MS = 5 * 60000;
+function withSetupLock(stateRoot, action, { waitMs = SETUP_LOCK_WAIT_MS } = {}) {
+  const lock = path.join(stateRoot, '.setup.lock');
+  const running = pid => { try { process.kill(pid, 0); return true; } catch (error) { return error.code === 'EPERM'; } };
+  const deadline = Date.now() + waitMs;
+  let fd;
+  for (;;) {
+    try { fd = fs.openSync(lock, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW, 0o600); break; }
+    catch (error) { if (error.code !== 'EEXIST') throw error; }
+    let stat;
+    let holder;
+    try { stat = privateEntry(lock, false); holder = Number.parseInt(fs.readFileSync(lock, 'utf8'), 10); }
+    catch (error) { if (error.code === 'ENOENT') continue; throw error; }
+    // An empty lock is a holder still writing its process id, unless it is old.
+    const age = Date.now() - stat.mtimeMs;
+    const gone = Number.isSafeInteger(holder) && holder > 0 ? !running(holder) : age > 10000;
+    if (gone || age > SETUP_LOCK_ABANDONED_MS) {
+      try { if (fs.lstatSync(lock).ino === stat.ino) fs.unlinkSync(lock); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      continue;
+    }
+    if (Date.now() >= deadline) refuse('HOST_SETUP_BUSY', 'Another Fleet setup is running for this state folder. Try again when it finishes.');
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+  }
+  try { fs.writeFileSync(fd, `${process.pid}\n`); fs.fsyncSync(fd); }
+  catch (error) { fs.closeSync(fd); fs.rmSync(lock, { force: true }); throw error; }
+  fs.closeSync(fd);
+  try { return action(); }
+  finally {
+    try { if (Number.parseInt(fs.readFileSync(lock, 'utf8'), 10) === process.pid) fs.unlinkSync(lock); } catch { /* already gone */ }
+  }
+}
+
 function setupPluginHost({ stateRoot, workspace, tier = 'standard', workers = false, providers: chosen = null, models = null } = {}) {
   requireHostEnvironment();
   process.umask(0o077);
@@ -312,6 +360,10 @@ function setupPluginHost({ stateRoot, workspace, tier = 'standard', workers = fa
   fs.mkdirSync(stateRoot, { recursive: true, mode: 0o700 });
   noLinkedAncestors(stateRoot);
   checkPrivateTree(stateRoot);
+  return withSetupLock(stateRoot, () => bindPluginSetup({ stateRoot, workspace, tier, workers, chosen, models, providers }));
+}
+
+function bindPluginSetup({ stateRoot, workspace, tier, workers, chosen, models, providers }) {
   const configFile = path.join(stateRoot, 'host-mode.json');
   let previousConfig = null;
   try { fs.lstatSync(configFile); previousConfig = readHostConfig(stateRoot, { allowPluginRebind: true }); }
@@ -319,6 +371,7 @@ function setupPluginHost({ stateRoot, workspace, tier = 'standard', workers = fa
   if (previousConfig && previousConfig.setupKind !== 'plugin') {
     refuse('HOST_PLUGIN_SETUP_CONFLICT', 'This state folder belongs to a separate Fleet setup. Choose a new private state folder.');
   }
+  let rebindFrom = previousConfig?.installRoot || null;
   if (previousConfig) {
     const machine = require('./setup/machine-record');
     const servicesRoot = path.join(stateRoot, 'services');
@@ -327,6 +380,11 @@ function setupPluginHost({ stateRoot, workspace, tier = 'standard', workers = fa
     const matches = (installRoot, nodePath, savedTier, savedWorkspace) =>
       record.installRoot === installRoot && record.nodePath === nodePath && record.tier === savedTier
       && record.workspaceRoots.length === 1 && record.workspaceRoots[0] === savedWorkspace;
+    // The plugin folder is what a rebind replaces, so the record may name an
+    // earlier one; an interrupted rebind in an earlier version left it apart
+    // from host-mode.json. The project, level and Node must still agree.
+    const agrees = Boolean(record) && matches(record.installRoot, previousConfig.nodePath, previousConfig.tier, previousConfig.workspace);
+    if (integrity?.ok && integrity.state === 'sealed' && agrees) rebindFrom = record.installRoot;
     if (integrity?.ok && integrity.state === 'sealed'
         && workspace !== previousConfig.workspace
         && !matches(previousConfig.installRoot, previousConfig.nodePath, previousConfig.tier, previousConfig.workspace)
@@ -334,8 +392,7 @@ function setupPluginHost({ stateRoot, workspace, tier = 'standard', workers = fa
       refuse('HOST_PLUGIN_SETUP_CONFLICT', `Run /tefleet setup again for ${previousConfig.workspace}, then change it.`);
     }
     if (!integrity?.ok || integrity.state !== 'sealed'
-        || !(matches(previousConfig.installRoot, previousConfig.nodePath, previousConfig.tier, previousConfig.workspace)
-          || matches(INSTALL_ROOT, process.execPath, tier, workspace))) {
+        || !(agrees || matches(INSTALL_ROOT, process.execPath, tier, workspace))) {
       const recordedWorkspace = record?.workspaceRoots?.length === 1 ? record.workspaceRoots[0] : null;
       const finish = integrity?.ok && integrity.state === 'sealed' && recordedWorkspace
         && record.installRoot === INSTALL_ROOT && record.nodePath === process.execPath
@@ -363,7 +420,7 @@ function setupPluginHost({ stateRoot, workspace, tier = 'standard', workers = fa
   try {
     if (previousConfig) privateEntry(configFile, false);
     try { recordBefore = fs.readFileSync(recordFile); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-    setupHost(config, { pluginRebindFrom: previousConfig?.installRoot || null });
+    setupHost(config, { pluginRebindFrom: rebindFrom });
   } catch (error) { fs.rmSync(temporary, { force: true }); throw error; }
   try { fs.renameSync(temporary, configFile); }
   catch (error) {

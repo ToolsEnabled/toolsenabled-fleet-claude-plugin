@@ -4,7 +4,9 @@ This statement covers the ToolsEnabled Fleet plugin. It does not describe other 
 
 ## Data kept on your computer
 
-Fleet keeps its setup choices, tasks, ledger records, memory, search index, subagent records, conversation history of the subagents it starts, settings, launch files for each subagent (generated settings and, where its CLI needs one, a copy of that CLI's model list), the computer's hostname in a machine record and, with audit on, its signed audit log and the log's signing key in its private state folder, `~/.toolsenabled-fleet-plugin` by default (or the folder you set in `TOOLSENABLED_FLEET_STATE_ROOT`). These records can contain prompts, file excerpts, tool arguments and results, and anything you or an agent choose to save. Every agent connected to the same Fleet setup can read them. Local logs can include paths and error details; check them before sharing.
+Fleet keeps its setup choices, tasks, ledger records, memory, search index, subagent records, conversation history of the subagents it starts, settings, launch files for each subagent (generated settings and, where its CLI needs one, a copy of that CLI's model list), the computer's hostname in a machine record and, with audit on, its signed audit log and the log's signing key in its private state folder, `~/.toolsenabled-fleet-plugin` by default (or the folder you set in `TOOLSENABLED_FLEET_STATE_ROOT`). These records can contain prompts, file excerpts, tool arguments and results, and anything you or an agent choose to save. Every agent connected to the same Fleet setup can read them.
+
+Fleet also keeps two kinds of local diagnostic log in its state folder, under `logs/`: the error output of each Claude Code subagent (up to 256K characters per file, the newest 50 files kept, with the sign-in secrets in your environment removed; Fleet cannot recognize a secret it never sees, such as one inside a CLI's own saved login), and a short record of how each Fleet server process ended (its process details, versions, memory use, how many requests it served and the name of the last tool called, never a tool's arguments). Error output is whatever the agent CLI printed, which can include file paths and error messages. These logs never leave your computer; check them before sharing.
 
 Claude Code's plugin data folder (or, without one, Fleet's state folder) holds the ID, not the words, of a standing rule you just added until your next message, and a change waiting for your one-time code, with only a digest of the code. Fleet also makes private socket folders for its subagent tree, `$XDG_RUNTIME_DIR/tef/<hash>/` or `/tmp/tef-<uid>/<hash>/`; they are temporary.
 
@@ -26,7 +28,23 @@ Subagent reports are written under `.fleet/reports/` in your project folder.
 
 Fleet's prompt hook receives each prompt in a session where the plugin is on, only to recognize `/tefleet ledger`, `/tefleet settings` and `/tefleet confirm`, which Fleet applies itself without sending them to Claude. It keeps nothing else, except a change waiting for your code, with only a digest of the code, for 5 minutes (in Claude Code's plugin data folder or Fleet's state folder). It does not send other prompts anywhere; a ledger command's words are saved in your ledger, and a settings change in Fleet's settings, in Fleet's state folder. At the start of each session in Fleet's project, the hook reads your open standing rules from that ledger and gives them to Claude (Fleet also gives them to every subagent it starts), and the ID of a rule you just added is held until your next message carries that rule to Claude.
 
-Fleet's tool hook (`schedule-guard.js`) reads CronCreate, CronUpdate, ScheduleWakeup, RemoteTrigger and SendMessage calls only to refuse a `/tefleet` command in them; it keeps nothing.
+Fleet's tool hook (`schedule-guard.js`) reads CronCreate, CronUpdate, ScheduleWakeup, RemoteTrigger and SendMessage calls only to refuse one whose prompt begins with a `/tefleet` command; it keeps nothing.
+
+## The agent CLIs' own privacy policies
+
+What an agent CLI sends to its provider is governed by that provider's privacy policy, not by Fleet:
+
+- Claude Code (Anthropic): https://www.anthropic.com/legal/privacy
+- Codex (OpenAI): https://openai.com/policies/ (the privacy policy for your region)
+- OpenCode: https://opencode.ai/legal/privacy-policy
+
+When an agent CLI uses a cloud provider, a gateway or a model provider that you set up for it, that provider's own privacy policy applies as well, for example:
+
+- Amazon Web Services (Amazon Bedrock): https://aws.amazon.com/privacy/
+- Google Cloud: https://cloud.google.com/terms/cloud-privacy-notice
+- Microsoft (Microsoft Foundry, Azure): https://www.microsoft.com/privacy/privacystatement
+
+For a gateway or any other provider you configure, see that provider's own policy.
 
 ## Removing data
 
@@ -34,4 +52,4 @@ Uninstalling the plugin keeps Fleet's state folder. Delete that folder yourself 
 
 ## Contact
 
-Questions or security concerns: support@toolsenabled.ai, or [GitHub issues](https://github.com/ToolsEnabled/toolsenabled-fleet-claude-plugin/issues) for anything that is not sensitive.
+Questions: support@toolsenabled.ai, or [GitHub issues](https://github.com/ToolsEnabled/toolsenabled-fleet-claude-plugin/issues) for anything that is not sensitive. Security problems: see [SECURITY.md](SECURITY.md), which offers private reporting and a safe harbor for good-faith research.

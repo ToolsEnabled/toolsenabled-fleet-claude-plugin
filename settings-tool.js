@@ -10,7 +10,7 @@ const CHANGE_HINT = 'To change them, type /tefleet settings followed by the chan
 
 const settingsTool = Object.freeze({
   name: 'fleet_settings', title: 'Fleet settings',
-  description: 'Show Fleet\'s settings for this project: depth (levels of subagents below this session), width (subagents each agent may have running at once), which agent CLIs (providers) and models subagents may use, the tools every subagent gets, and audit (off by default, when Fleet keeps no audit record; on, Fleet signs a record of the reads and writes of Fleet\'s own file tools, ledger changes and task and memory changes it makes, and refuses any of them it cannot record). Changes nothing: only the person changes these settings, by typing /tefleet settings followed by the change.',
+  description: 'Show Fleet\'s saved settings: depth (levels of subagents below this session), width (subagents each agent may have running at once), which agent CLIs (providers) and models subagents may use, the tools every subagent gets, and audit (off by default, when Fleet keeps no audit record; on, Fleet signs a record of the reads and writes of Fleet\'s own file tools, ledger changes and task and memory changes it makes, and refuses any of them it cannot record). Changes nothing: only the person changes these settings, by typing /tefleet settings followed by the change.',
   inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 });

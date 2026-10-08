@@ -44,7 +44,8 @@ function ruleLines({ collect = selector => require('./owner-request-store').coll
     size += line.length + 1;
   }
   const more = lines.length - shown.length;
-  return [...shown, ...(more > 0 ? [`(${more} more; read them with ledger.read)`] : [])];
+  // Rules are delivered here, never fetched: the rest are the person's to see, not instructions to look up.
+  return [...shown, ...(more > 0 ? [`(${more} more not shown; the person sees every rule with /tefleet ledger)`] : [])];
 }
 
 function standingRulesBlock(options = {}) {

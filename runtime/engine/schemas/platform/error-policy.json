@@ -26,7 +26,7 @@
     {"code":"INJECTION_DETECTED","classification":"terminal","retryable":false,"defaultRetryAfterMs":null,"safeSummary":"Unsafe untrusted instructions were detected and blocked."},
     {"code":"SANDBOX_VIOLATION","classification":"terminal","retryable":false,"defaultRetryAfterMs":null,"safeSummary":"The isolated execution boundary rejected this operation."},
     {"code":"EXTERNAL_CHANGE","classification":"retry-after-input","retryable":false,"defaultRetryAfterMs":null,"safeSummary":"The external state changed. Re-check it before continuing."},
-    {"code":"INTERNAL_ERROR","classification":"terminal","retryable":false,"defaultRetryAfterMs":null,"safeSummary":"The operation stopped safely because of an internal error."},
+    {"code":"INTERNAL_ERROR","classification":"terminal","retryable":false,"defaultRetryAfterMs":null,"safeSummary":"The operation stopped safely because of an internal error. Check whether the action took effect before trying it again; if this keeps happening, report it to Fleet's support with the time it happened."},
     {"code":"OPERATION_CANCELLED","classification":"terminal","retryable":false,"defaultRetryAfterMs":null,"safeSummary":"The operation was cancelled."}
   ]
 }

@@ -4,7 +4,7 @@ argument-hint: "[setup | status | settings [<changes>] | ledger [page <n> | all 
 disable-model-invocation: true
 ---
 
-The person typed `/tefleet $ARGUMENTS`. Handle it with Fleet's tools, without shell commands or file edits. If Fleet offers only `fleet_setup_status` and `fleet_setup`, Fleet is not set up for this project: handle `setup` as below, and for anything else call `fleet_setup_status` and show what it says.
+The person typed `/tefleet $ARGUMENTS`. Handle it with Fleet's tools, without shell commands or file edits. If none of Fleet's tools are available in this session, say that Fleet runs only in Claude Code on Linux and stop. If Fleet offers only `fleet_setup_status` and `fleet_setup`, Fleet is not set up for this project: handle `setup` as below, and for anything else call `fleet_setup_status` and show what it says.
 
 - Nothing, `status` or `help`: call `fleet_settings` and `fleet_session_status`. Show Fleet's settings and the subagents in a few short lines (finished ones from earlier sessions can be resumed), then these commands as written:
   - `/tefleet setup`: set up Fleet in this project, or move it here.

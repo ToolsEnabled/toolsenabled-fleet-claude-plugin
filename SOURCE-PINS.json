@@ -1,7 +1,7 @@
 {
   "plugin": "toolsenabled-fleet",
-  "version": "1.11.1",
-  "engineCommit": "f9f6d7706c3a4394e2ab76bdae61e5c8cd779a0a",
+  "version": "1.11.2",
+  "engineCommit": "020084d18c8f79bf8481f1ba0323a04f79d88c95",
   "engineAllowlist": "installer/claude-plugin/SOURCE-ALLOWLIST",
   "runtimeFiles": 175
 }
