@@ -2,7 +2,10 @@
 'use strict';
 
 // Set privacy before importing any module that may create shared state.
-process.umask(0o077);
+// The umask this process started with is the person's: Fleet's file tools
+// give the project files they create the permissions it allows
+// (projectUmask in src/lib/providers/host-control.js).
+process[Symbol.for('toolsenabled.fleet.inheritedUmask')] = process.umask(0o077);
 const path = require('node:path');
 const os = require('node:os');
 const runtime = require('../src/lib/host-runtime');

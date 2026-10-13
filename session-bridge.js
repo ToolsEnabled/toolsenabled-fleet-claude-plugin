@@ -25,6 +25,34 @@ function sessionView(trees, pid, projectTrees) {
 
 const INIT_ID = 'fleet-bridge-initialize';
 
+// The largest request the engine accepts (MAX_MESSAGE_BYTES in its
+// src/mcp-server.js). The bridge refuses a larger one itself, naming its id,
+// because the engine can only answer it with id null, which leaves the call
+// waiting.
+const REQUEST_BYTES = 1024 * 1024;
+// A request line is held whole up to this many characters, so its id can be
+// read; past it only the line's ends are kept.
+const REQUEST_HELD = 8 * 1024 * 1024;
+// The longest engine answer passed on. One host.read_file of the 2 MiB file
+// limit can be about 13 characters a byte: the file is in the answer twice
+// (JSON text and structuredContent), and a control character is escaped once
+// as \u0001 and again inside the text. This is more than twice that.
+const RESPONSE_CHARS = 64 * 1024 * 1024;
+// How much of each end of a too-long line is kept to find its id.
+const EDGE = 1024;
+const JSON_ID = String.raw`(-?(?:0|[1-9]\d*)|"(?:[^"\\]|\\.){0,512}")`;
+// The id of a message whose own text begins with it, as the engine writes
+// every answer: {"jsonrpc":"2.0","id":7,...
+const LEADING_ID = new RegExp(String.raw`^\s*\{\s*(?:"jsonrpc"\s*:\s*"2\.0"\s*,\s*)?"id"\s*:\s*${JSON_ID}\s*[,}]`);
+// The id of a message that ends with it, as Claude Code writes requests:
+// {"method":...,"params":{...},"jsonrpc":"2.0","id":7}
+const TRAILING_ID = new RegExp(String.raw`[{,]\s*"id"\s*:\s*${JSON_ID}\s*\}\s*$`);
+function lineId(pattern, text) {
+  const found = pattern.exec(text);
+  if (!found) return undefined;
+  try { return JSON.parse(found[1]); } catch { return undefined; }
+}
+
 // The canonical engine remains an unchanged child. Only the plugin's public,
 // read-only session and settings tools and the setup tool are added; every
 // other engine request/response is forwarded while Fleet serves this session's
@@ -35,7 +63,8 @@ const INIT_ID = 'fleet-bridge-initialize';
 async function serveSession(config, { input = process.stdin, output = process.stdout,
   launch = () => spawn(process.execPath, [path.join(__dirname, 'runtime-entry.js')],
     { env: launcherEnvironment(), stdio: ['pipe', 'pipe', 'inherit'] }), readTrees, projectTrees, setup = runSetup, settings = runSettings,
-  preInitialized = null, initialBuffer = '', readSetup = () => savedSetup(config.stateRoot), watchMs = 2000 } = {}) {
+  preInitialized = null, initialBuffer = '', readSetup = () => savedSetup(config.stateRoot), watchMs = 2000,
+  requestBytes = REQUEST_BYTES, requestHeld = REQUEST_HELD, responseChars = RESPONSE_CHARS } = {}) {
   const state = path.join(config.stateRoot, 'workers');
   const loadTrees = readTrees || (() => require(path.join(config.engine, 'src/lib/openshell-tree-store')).listTrees(state));
   const project = projectTrees || require(path.join(config.engine, 'src/lib/fleet-tree-view')).projectTrees;
@@ -70,26 +99,56 @@ async function serveSession(config, { input = process.stdin, output = process.st
     if (!killDeadline) killDeadline = setTimeout(() => child.kill('SIGKILL'), 12000);
   };
   const fail = () => { process.exitCode = 1; stop(); };
-  function frames(stream, consume, initial = '') {
-    let pending = initial;
+  // One JSON-RPC message per line, in each direction. A line longer than
+  // `limit` characters is never held whole: its first and last characters,
+  // which name the request it belongs to, go to `oversized`, and the rest is
+  // dropped. Only a line that is not JSON at all stops Fleet.
+  function frames(stream, consume, { initial = '', limit, oversized }) {
+    let parts = [];
+    let held = 0;
+    let over = null;
+    let broken = false;
     const data = chunk => {
-      pending += chunk;
-      // Bounded transport frames, including a client that never sends newline.
-      if (pending.length > 2_000_000) { fail(); return; }
-      let split;
-      while ((split = pending.indexOf('\n')) !== -1) {
-        const line = pending.slice(0, split); pending = pending.slice(split + 1);
+      let at = 0;
+      while (!broken) {
+        const split = chunk.indexOf('\n', at);
+        const piece = split === -1 ? chunk.slice(at) : chunk.slice(at, split);
+        if (over) {
+          over.length += piece.length;
+          over.tail = (over.tail + piece).slice(-EDGE);
+        } else if (held + piece.length > limit) {
+          const start = parts.join('') + piece;
+          parts = []; held = 0;
+          over = { head: start.slice(0, EDGE), tail: start.slice(-EDGE), length: start.length };
+        } else if (piece) {
+          parts.push(piece); held += piece.length;
+        }
+        if (split === -1) return;
+        at = split + 1;
+        if (over) { const line = over; over = null; oversized(line); continue; }
+        const line = parts.join('');
+        parts = []; held = 0;
         if (!line.trim()) continue;
-        if (line.length > 1_000_000) { fail(); return; }
-        try { consume(JSON.parse(line)); } catch { fail(); return; }
+        let message;
+        try { message = JSON.parse(line); } catch { broken = true; fail(); return; }
+        try { consume(message, line); } catch { broken = true; fail(); return; }
       }
     };
     stream.setEncoding('utf8');
     stream.on('data', data);
-    if (pending) data('');
+    if (initial) data(initial);
     stream.resume();
     return () => stream.removeListener('data', data);
   }
+  // A request too large for the engine is answered here, by its id, and never
+  // forwarded; Fleet and every subagent keep running.
+  const refuseRequest = (id, size) => {
+    if (id === undefined) {
+      process.stderr.write(`Fleet dropped a request of ${size} that has no id it could read; it is over the ${requestBytes}-byte limit.\n`);
+      return;
+    }
+    send({ jsonrpc: '2.0', id, error: { code: -32600, message: `This request is ${size}, over Fleet's ${requestBytes}-byte limit for one request, so Fleet did not run it and nothing changed. Send less at once: write a large file in parts, the first with host.write_file and the rest with host.patch_file.` } });
+  };
   let initializing = Boolean(preInitialized);
   const queued = [];
   // The client sees the plugin's name and version, not the bundled engine's.
@@ -113,7 +172,14 @@ async function serveSession(config, { input = process.stdin, output = process.st
   // tools this session offers.
   const watch = setInterval(() => { if (signature() !== lastSetup) toolsChanged(); }, watchMs);
   watch.unref?.();
-  const removeInput = frames(input, message => {
+  const removeInput = frames(input, (message, line) => {
+    const bytes = Buffer.byteLength(line, 'utf8');
+    if (bytes > requestBytes) {
+      // A response to a request of the engine's has nobody here to answer.
+      if (message && typeof message === 'object' && typeof message.method === 'string' && Object.hasOwn(message, 'id')) refuseRequest(message.id, `${bytes} bytes`);
+      else process.stderr.write(`Fleet dropped a ${bytes}-byte message from Claude Code; it is over the ${requestBytes}-byte limit.\n`);
+      return;
+    }
     if (message?.method === 'tools/list' && Object.hasOwn(message, 'id') && movedTo()) {
       send({ jsonrpc: '2.0', id: message.id, result: { tools: [statusTool, setupTool] } });
       return;
@@ -163,7 +229,8 @@ async function serveSession(config, { input = process.stdin, output = process.st
     }
     if (initializing) { queued.push(message); return; }
     forward(message);
-  }, initialBuffer);
+  }, { initial: initialBuffer, limit: requestHeld,
+    oversized: line => refuseRequest(lineId(TRAILING_ID, line.tail) ?? lineId(LEADING_ID, line.head), `over ${line.length} characters`) });
   const removeOutput = frames(child.stdout, message => {
     if (initializing && message?.id === INIT_ID) {
       if (message.error) { fail(); return; }
@@ -185,7 +252,18 @@ async function serveSession(config, { input = process.stdin, output = process.st
       message.result.tools.push(...[sessionTool, setupTool, settingsTool].map(titled));
     }
     send(message);
-  });
+  }, { limit: responseChars, oversized: line => {
+    // An answer too long to pass on fails only the request it answers.
+    const id = lineId(LEADING_ID, line.head);
+    if (id === undefined) {
+      process.stderr.write(`Fleet dropped a ${line.length}-character message from its engine; it is over the ${responseChars}-character limit.\n`);
+      return;
+    }
+    if (initializing && id === INIT_ID) { fail(); return; }
+    initializeIds.delete(JSON.stringify(id));
+    lists.delete(JSON.stringify(id));
+    send({ jsonrpc: '2.0', id, error: { code: -32603, message: `Fleet's answer to this request was ${line.length} characters, over the ${responseChars} this connection passes on, so it was not delivered. Fleet and its subagents keep running, and anything the request changed stands. Ask for less at once: read part of a large file with host.read_file's startByte and endByte.` } });
+  } });
   const closeInput = () => {
     child.stdin.end();
     if (!deadline) deadline = setTimeout(stop, 12000);
@@ -218,4 +296,4 @@ async function serveSession(config, { input = process.stdin, output = process.st
     removeBinding();
   }
 }
-module.exports = { serveSession, sessionView, sessionTool };
+module.exports = { serveSession, sessionView, sessionTool, REQUEST_BYTES, RESPONSE_CHARS };

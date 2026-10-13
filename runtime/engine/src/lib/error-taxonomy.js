@@ -193,6 +193,9 @@ function classifySourceCode(code, status, timedOut, matches) {
   if (['HOST_FILE_CHANGED_BEFORE_WRITE', 'HOST_FILE_IDENTITY_CHANGED'].includes(code)) return 'EXTERNAL_CHANGE';
   if (code === 'HOST_FILE_CHANGED_DURING_READ') return 'STALE_DATA';
   if (['HOST_FILE_PATCH_MISMATCH', 'HOST_FILE_PATCH_AMBIGUOUS'].includes(code)) return 'INVALID_REQUEST';
+  // A whole-file write over a file that is not UTF-8: the refusal names
+  // host.patch_file, which the agent can use instead.
+  if (code === 'HOST_FILE_NOT_UTF8') return 'INVALID_REQUEST';
   if (code === 'HOST_BYTE_MEDIATION_OFF') return 'POLICY_DENIED';
   // Exact exception: this 403 is an organisation-policy decision, not an
   // expired sign-in. Keep every other historical 403 on the existing path.

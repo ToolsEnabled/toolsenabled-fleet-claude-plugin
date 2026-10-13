@@ -56,7 +56,8 @@ const SETTINGS_USAGE = [
 ].join('\n');
 const HANDLED = '(Fleet handled this itself; it was not sent to Claude.)';
 // How much of the person's rules a Claude session is given; subagent briefs
-// use the same bounds. Claude can read the rest with Fleet's ledger.read.
+// use the same bounds. The rest are not given; the person sees them all with
+// /tefleet ledger.
 const MAX_RULES = 40;
 const MAX_RULE_CHARS = 500;
 const MAX_RULES_TEXT = 6000;
@@ -87,14 +88,19 @@ function quoted(value, max = 300) {
   return chars.length > max ? `${chars.slice(0, max - 1).join('')}…` : chars.join('');
 }
 // Runs one of Fleet's own commands. `failure` begins the sentence the person
-// reads when it fails, such as "Fleet's ledger did not change".
-function command(argv, failure, retried = false) {
+// reads when it fails, such as "Fleet's ledger did not change". A command
+// that runs setup's sign-in check again (`checksSignIn`) gets the person's own
+// environment, as the setup pane and the fleet_setup tool do, so the check
+// sees the sign-in variables a subagent gets; every other command gets none.
+function command(argv, failure, { retried = false, checksSignIn = false } = {}) {
   const { spawnSync } = require('node:child_process');
-  const result = spawnSync(process.execPath, argv, { env: require('./runtime-config').childEnvironment(), encoding: 'utf8', timeout: 80000, maxBuffer: 4 * 1024 * 1024 });
+  const runtime = require('./runtime-config');
+  const env = checksSignIn ? runtime.launcherEnvironment() : runtime.childEnvironment();
+  const result = spawnSync(process.execPath, argv, { env, encoding: 'utf8', timeout: 80000, maxBuffer: 4 * 1024 * 1024 });
   if (result.status === 0) return { ok: true, text: String(result.stdout).trim() };
   const detail = String(result.stderr || result.error?.message || 'Fleet did not answer.').trim();
   // Right after a plugin update, bind the saved setup to this version first.
-  if (!retried && /HOST_PLUGIN_REBIND_REQUIRED/.test(detail) && require('./setup-server').runRebind()) return command(argv, failure, true);
+  if (!retried && /HOST_PLUGIN_REBIND_REQUIRED/.test(detail) && require('./setup-server').runRebind()) return command(argv, failure, { retried: true, checksSignIn });
   if (/HOST_SETUP_REQUIRED|not configured|setup is required/i.test(detail)) {
     return { ok: false, detail, text: 'Fleet is not set up for this project yet, so nothing was changed. Type /tefleet setup first.' };
   }
@@ -331,9 +337,14 @@ function addRuleReply(id, here) {
   const { shown } = ruleLines(rules);
   const row = rules.find(rule => rule.id === id);
   const long = row && (Array.from(String(row.words || '').replace(/\s+/g, ' ').trim()).length > MAX_RULE_CHARS || row.truncated === true);
-  const notes = [];
-  if (row && !shown.has(id)) notes.push(`New sessions are given your first ${shown.size} standing rules in full and told to read the rest, including this one, with Fleet's ledger.read tool.`);
-  else if (long) notes.push(`New sessions and subagents are given its first ${MAX_RULE_CHARS} characters and told to read the rest with Fleet's ledger.read tool.`);
+  // Say what happens: a rule past the limit is not given to new sessions or
+  // subagents at all, and a long one only in part.
+  if (row && !shown.has(id)) {
+    return [`Done: added standing rule ${id} to Fleet's ledger.`,
+      `${id} is past what new sessions and subagents are given (your first ${shown.size} standing rules, at most ${MAX_RULES} rules and ${MAX_RULES_TEXT} characters), so they are not given it.`,
+      'To make room, remove rules you no longer need with /tefleet ledger remove <ID>; /tefleet ledger shows them all.', HANDLED].join(' ');
+  }
+  const notes = long ? [`New sessions and subagents are given only its first ${MAX_RULE_CHARS} characters, not the rest; shorten it if the rest matters.`] : [];
   return [here
     ? `Done: added standing rule ${id} to Fleet's ledger. New Fleet subagents and sessions follow it, and this session does from your next message.`
     : `Done: added standing rule ${id} to Fleet's ledger. Fleet's subagents and new sessions in its project follow it.`, ...notes, HANDLED].join(' ');
@@ -392,7 +403,8 @@ function settingsView(changes) {
   const { describeSettings: describe } = require('./settings-tool');
   const changing = Object.keys(changes).length > 0;
   const result = command([path.join(__dirname, 'settings-entry.js'), ...(changing ? ['--apply', JSON.stringify(changes)] : ['--show'])],
-    changing ? 'Fleet\'s settings were not changed' : 'Fleet\'s settings are unavailable');
+    changing ? 'Fleet\'s settings were not changed' : 'Fleet\'s settings are unavailable',
+    { checksSignIn: changes.providers !== undefined || changes.models !== undefined });
   if (!result.ok) return result.text;
   let view;
   try { view = JSON.parse(result.text.slice(result.text.indexOf('{'))); }

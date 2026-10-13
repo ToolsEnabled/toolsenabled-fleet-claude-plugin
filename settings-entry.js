@@ -2,7 +2,7 @@
 'use strict';
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { resolveConfig, configureEnvironment, childEnvironment } = require('./runtime-config');
+const { resolveConfig, configureEnvironment, childEnvironment, launcherEnvironment } = require('./runtime-config');
 // Fleet's settings. Depth, width and audit are the engine's
 // own settings; providers and models are saved by setup, so changing them runs
 // setup again for the same project (which re-checks each agent CLI). Changes
@@ -13,8 +13,12 @@ const SETTINGS = Object.freeze({
   width: Object.freeze({ id: 'fleet.tree_width', min: 1, max: 64 }),
   audit: Object.freeze({ id: 'audit.enabled', toggle: true }),
 });
-function run(args, what, { cwd, env = process.env } = {}) {
-  const result = spawnSync(process.execPath, args, { cwd, env: childEnvironment(env), encoding: 'utf8', timeout: 60000, maxBuffer: 1024 * 1024 });
+// Fleet's helpers get no sign-in variable. Setup is the exception (`launch`):
+// its sign-in check must see the ones a subagent gets, as it does from the
+// setup pane and the fleet_setup tool.
+function run(args, what, { cwd, env = process.env, launch = false } = {}) {
+  const result = spawnSync(process.execPath, args, { cwd, env: launch ? launcherEnvironment(env) : childEnvironment(env),
+    encoding: 'utf8', timeout: 60000, maxBuffer: 1024 * 1024 });
   if (result.status !== 0) {
     throw new Error(String(result.stderr || result.error?.message || `${what} failed.`).replace(/^Fleet setup failed:\s*/, '').trim());
   }
@@ -63,7 +67,7 @@ function apply(config, changes) {
     if (models !== undefined) args.push('--models', models);
     // Setup accepts only the project of the session it runs for: this is the
     // saved project itself, set up again from its own folder.
-    const done = JSON.parse(run(args, 'Fleet setup', { cwd: saved.workspace, env: { ...process.env, CLAUDE_PROJECT_DIR: saved.workspace } })
+    const done = JSON.parse(run(args, 'Fleet setup', { cwd: saved.workspace, env: { ...process.env, CLAUDE_PROJECT_DIR: saved.workspace }, launch: true })
       .replace(/^[^{]*/, ''));
     if (!done.workers) notes.push(done.note || 'Subagents are off: no chosen agent CLI is ready.');
     else if (!saved.workers) notes.push('Subagents are now on. Start a new Claude Code session in this project to use them.');

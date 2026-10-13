@@ -18,7 +18,7 @@
       "executable": false
     },
     "CHANGELOG.md": {
-      "sha256": "856d0102f3c2e89faa695d6cb6edda5fcdb3e6188ddde16a4549b6fb737da012",
+      "sha256": "324847ca48a09c17e723c32b377ae4560542f5a17101b8b57d08404289457e16",
       "executable": false
     },
     "LICENSE": {
@@ -26,7 +26,7 @@
       "executable": false
     },
     "LOCAL-PATCHES.json": {
-      "sha256": "eee4ed784cc9d6cfbb70cd7e92571e2973e5afdd94bbd1bc6ce02da536dff84a",
+      "sha256": "ab4f90cad934c7c4c5642b753aadfa884b1e5beaa51174226a2cfb826a487ab8",
       "executable": false
     },
     "PRIVACY.md": {
@@ -34,7 +34,7 @@
       "executable": false
     },
     "README.md": {
-      "sha256": "1ab815f49ecaedf6063719c196907744e73c3004f03ab6144336dbd0162a712e",
+      "sha256": "988ef24f0a8be2145ad800ad490aa0d19e65896baa2fc7f6f2a96726667a44c2",
       "executable": false
     },
     "RECOVERY.md": {
@@ -46,7 +46,7 @@
       "executable": false
     },
     "SOURCE-PINS.json": {
-      "sha256": "7e250291831608a3b03c299b3b31c6d0660bf7e0dc9c3f9f82815a79321d5dd6",
+      "sha256": "460c6b01e64c2ea4d30c57f1f2cb3da9b46179978cfd987893fdc952a3a3e90f",
       "executable": false
     },
     "commands/tefleet.md": {
@@ -58,7 +58,7 @@
       "executable": false
     },
     "hooks/fleet.test.ts": {
-      "sha256": "f662ba600841fcabf5bcecc42f842684bdc015639fb209637e18e8db1bf314bf",
+      "sha256": "669ef653df1ae77734199294b38fbbfc35d6b5a03f3a259d2c9ccd4e7f5534b7",
       "executable": false
     },
     "hooks/hooks.json": {
@@ -78,7 +78,7 @@
       "executable": false
     },
     "hooks/register.tsx": {
-      "sha256": "bcd0be8c4f45ad48bec15f856db45df5eb6eebeed4a8c223cd51e821ee04a05a",
+      "sha256": "c56a39ee0e724ba4d289de1433a350572f6898dabd35238f7c0b9f87f14d57bc",
       "executable": false
     },
     "hooks/view.mjs": {
@@ -90,7 +90,7 @@
       "executable": false
     },
     "ledger-hook.js": {
-      "sha256": "7361a856ce9d7f4ffd9a79d82e20361077b40fe77c1a813682be99d2d8cd8d17",
+      "sha256": "ff3a4d0bbabfc79f5f183abda4cb670156fed5ecedc09b1b6a3ae6d2b497673c",
       "executable": false
     },
     "mcp-entry.js": {
@@ -134,7 +134,7 @@
       "executable": false
     },
     "runtime/engine/bin/toolsenabled-host.js": {
-      "sha256": "4fead96485f6702eb6430be9d9ee7cf441670919005299babb54d7d036150f8d",
+      "sha256": "ffa0ce4ba28be91d851770a1b05f16b9ab4cd4e334e6fb4284c8d7a5d1b9502c",
       "executable": true
     },
     "runtime/engine/config/agent-org.json": {
@@ -402,7 +402,7 @@
       "executable": false
     },
     "runtime/engine/src/lib/error-taxonomy.js": {
-      "sha256": "9272ce5dd219729e5040c08a57064ca6ff7942dece59837589e7b17c769a86fc",
+      "sha256": "bda0088d2b22f5f327068dceaa776b4968fec3f7b8e68506a1192114455abfb3",
       "executable": false
     },
     "runtime/engine/src/lib/file-tool-capabilities.js": {
@@ -478,7 +478,7 @@
       "executable": false
     },
     "runtime/engine/src/lib/host-runtime.js": {
-      "sha256": "523ddf56ca76488083809bb250714f12dd7cfc57f632257434c4e9eac56ffb8f",
+      "sha256": "1d318875a751d126d101f5965cd03c510914d1c6cb9b76caf811b6313a4a238d",
       "executable": false
     },
     "runtime/engine/src/lib/host-status.js": {
@@ -622,7 +622,7 @@
       "executable": false
     },
     "runtime/engine/src/lib/providers/host-control.js": {
-      "sha256": "7627d46748e13360639655f671d65bc8cc76fc0d94ba152bdbb1586737b593a7",
+      "sha256": "751c071b849514c02d5bd99c6b934713d141925c28ed2338f17912de37a6a1da",
       "executable": false
     },
     "runtime/engine/src/lib/providers/memory.js": {
@@ -830,11 +830,11 @@
       "executable": false
     },
     "session-bridge.js": {
-      "sha256": "3036ac446aafdba5a07496ccc1245b578e598ea930794050e2a4df2ef6cb239c",
+      "sha256": "d154251ce8b513f8fa95820d2037de57daf0a1f34f0e0d57069e91bbb54ea7a4",
       "executable": false
     },
     "settings-entry.js": {
-      "sha256": "539721c36b9b3e17be12c254b40ce414453d10a29fb2d16289b39cfee4eb435b",
+      "sha256": "66cec74bbd742009001053ffc4372811bf1e51ededd432bcea6e729197844536",
       "executable": false
     },
     "settings-tool.js": {

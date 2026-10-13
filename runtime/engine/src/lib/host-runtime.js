@@ -171,10 +171,13 @@ function privateDirectory(file) {
 // The plugin setup this process serves, so its subagent limits can be read live.
 let servedPluginStateRoot = null;
 // Providers and models the saved plugin setup allows now, or null when unreadable.
+// After a plugin update, the first new session rebinds the setup to the new
+// plugin folder; the limits do not depend on that folder, so a session still
+// running from before the update reads them through the rebind.
 function currentPluginLimits() {
   if (!servedPluginStateRoot) return null;
   try {
-    const saved = readHostConfig(servedPluginStateRoot, { setupKind: 'plugin' });
+    const saved = readHostConfig(servedPluginStateRoot, { setupKind: 'plugin', allowPluginRebind: true });
     return Object.freeze({ workers: saved.workers, workspace: saved.workspace,
       providers: saved.providers || null, models: saved.models || null });
   } catch { return null; }

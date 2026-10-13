@@ -96,6 +96,22 @@ for (const configured of ['', '/private/state with spaces']) {
   })
 }
 
+test('setup gives the sign-in checks and setup four minutes, the time a slow agent CLI can take', async ($, on) => {
+  world(on)
+  const calls: any[] = []
+  on('process.run', (_: any, e: any) => {
+    calls.push(e)
+    return e.argv[2] === '--check'
+      ? ok({ mode: 'host', workspace, providers: ['opencode'], tier: 'standard' })
+      : ok({ setup: 'ready', workspace, tier: 'standard', workers: true, providers: ['opencode'] })
+  })
+  const result = await confirmSetup($)
+  expect(result.text).toContain('Fleet ready')
+  // The checks alone can take over 40 s (an agent CLI asked twice at 20 s, then
+  // its providers list); Claude Code's default of 30 s cut setup off.
+  expect(calls.map(call => [call.argv[2], call.init.timeoutMs])).toEqual([['--check', 240000], ['--setup', 240000]])
+})
+
 test('setup with no agent CLI still completes with subagents off', async ($, on) => {
   world(on)
   on('process.run', (_: any, e: any) => e.argv[2] === '--check'

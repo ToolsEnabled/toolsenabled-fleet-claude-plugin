@@ -24,6 +24,39 @@ const HOME = process.platform === 'linux' ? os.userInfo().homedir : os.homedir()
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_LIST_ENTRIES = 5000;
 
+// PROJECT FILES KEEP THE PERSON'S PERMISSIONS.
+//
+// Fleet narrows its own umask to 077 so its private state stays private, and
+// a mode given to open() or mkdir() is narrowed by it too. Project files are
+// the person's: a file these tools replace keeps the permission bits it had,
+// and a file or folder they create gets the bits the person's own umask
+// gives, as their editor would. bin/toolsenabled-host.js records that umask
+// before narrowing its own; a process started any other way creates new
+// project files owner-only, as Fleet always did.
+const INHERITED_UMASK = Symbol.for('toolsenabled.fleet.inheritedUmask');
+function projectUmask() {
+  const mask = process[INHERITED_UMASK];
+  return Number.isInteger(mask) && mask >= 0 && mask <= 0o777 ? mask : 0o077;
+}
+// Creates the missing folders of `directory`; each one it made gets the
+// person's permissions. Each is changed through its own descriptor, opened
+// without following a link.
+function makeProjectDirectories(directory) {
+  const first = fs.mkdirSync(directory, { recursive: true });
+  if (first === undefined) return;
+  const mode = 0o777 & ~projectUmask();
+  const made = [first];
+  for (const part of path.relative(first, directory).split(path.sep).filter(Boolean)) made.push(path.join(made.at(-1), part));
+  for (const folder of made) {
+    const descriptor = fs.openSync(folder, fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | (fs.constants.O_NOFOLLOW || 0));
+    try { fs.fchmodSync(descriptor, mode); } finally { fs.closeSync(descriptor); }
+  }
+}
+// Text read from a file that is not UTF-8 has U+FFFD where its other bytes
+// were, so a whole-file write of that text would silently change them.
+const { isUtf8 } = require('node:buffer');
+const LOSSY_READ_NOTE = 'This file is not valid UTF-8 text: each byte that is not UTF-8 is shown as U+FFFD. host.write_file refuses to replace it, because writing this text back would change those bytes; change its text with host.patch_file, which keeps every other byte as it is.';
+
 // THE PRODUCT CODE FOLDERS, kept apart from the anchors above because they are
 // the one rule the person may lift (agent.product_source_writes) for checkouts
 // that are not the running product. Same name-anchored convention as the list
@@ -686,6 +719,8 @@ function publishHostLocked(publication) {
   try {
     descriptor = fs.openSync(temporary, 'wx', mode);
     temporaryOwned = true;
+    // open() narrowed the mode by Fleet's umask; the replacement keeps the file's own.
+    fs.fchmodSync(descriptor, mode & 0o777);
     fs.writeFileSync(descriptor, after);
     fs.fsyncSync(descriptor);
     fs.closeSync(descriptor); descriptor = undefined;
@@ -759,12 +794,14 @@ function prepareHostCreate(preparation) {
   }
   assertCurrent();
   // The legacy writer created missing parent directories; so does creation.
-  fs.mkdirSync(path.dirname(located.resolved), { recursive: true });
+  makeProjectDirectories(path.dirname(located.resolved));
   hostCreationPaths(preparation);
   const descriptor = fs.openSync(located.stagingPath, 'wx');
   // Before PREPARED, a crash can leave an unreferenced exclusive stage. It is
   // never a published target, and recovery must not infer ownership by age.
   try {
+    // The stage becomes the file, so it gets the person's permissions now.
+    fs.fchmodSync(descriptor, 0o666 & ~projectUmask());
     fs.writeFileSync(descriptor, after);
     fs.fsyncSync(descriptor);
     const stat = fs.fstatSync(descriptor, { bigint: true });
@@ -968,6 +1005,7 @@ function readFileMediated({ path: target, startByte, endByte } = {}, dependencie
       path: resolved,
       content: windowed ? decodeHostWindow(observed.bytes) : observed.bytes.toString('utf8'),
       bytes: observed.bytes.length,
+      ...(windowed || isUtf8(observed.bytes) ? {} : { lossy: true, note: LOSSY_READ_NOTE }),
       ...(windowed ? { startByte: receipt.startByte, endByte: receipt.endByte, totalBytes: receipt.totalBytes } : {}),
       version: receipt.resourceVersion,
       receipt,
@@ -975,6 +1013,17 @@ function readFileMediated({ path: target, startByte, endByte } = {}, dependencie
       currentToolInvocation
     };
   }, error => hostRefusal(error, resolved, 'read'));
+}
+
+// A whole-file write would replace bytes that are not UTF-8, which no text
+// can carry. Anything else the current file is (absent, changing, too large)
+// is left to the write itself, which refuses it as before.
+function refuseLossyReplacement(resource, displayPath) {
+  let current;
+  try { current = materializeHost(resource).bytes; } catch { return; }
+  if (current && !isUtf8(current)) {
+    fail('HOST_FILE_NOT_UTF8', `${displayPath} is not valid UTF-8 text, so host.write_file would change its other bytes. Nothing was written. Change its text with host.patch_file, which keeps every other byte as it is.`);
+  }
 }
 
 function writeFileMediated({ path: target, content } = {}, dependencies = {}) {
@@ -989,6 +1038,7 @@ function writeFileMediated({ path: target, content } = {}, dependencies = {}) {
   }
   if (existingIsSymlink) fail('HOST_PATH_FORBIDDEN', 'refusing to write through a symbolic link.');
   const resource = hostResource(resolved);
+  refuseLossyReplacement(resource, resolved);
   const bytes = Buffer.from(content, 'utf8');
   const { scope, binding, currentToolInvocation, assertCurrent } = beginMediated(dependencies, 'host.write_file', resolved);
   const requireRecordAsync = dependencies.requireRecordAsync || auditAdmission.requireRecordAsync;

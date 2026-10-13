@@ -172,6 +172,12 @@ async function setupError($: any, error: unknown) {
   return `Fleet setup did not finish: ${detail.replace(/^Fleet setup failed:\s*/, '')}\nRun /fleet setup again after resolving this.`
 }
 
+// The sign-in checks run one agent CLI after another and can take minutes
+// together: an agent CLI that is slow to answer is asked twice, at 20 s each,
+// and then lists its providers (setup-entry.js survey). Setup adds Fleet's own
+// host setup. Claude Code's default of 30 s cut both off.
+const SETUP_TIMEOUT_MS = 240000
+
 async function setupFleet($: any) {
   if (settingUp) return { text: 'Fleet setup is already running.' }
   try {
@@ -179,7 +185,7 @@ async function setupFleet($: any) {
     // Setup accepts only the session's own project; name it, so a stale
     // CLAUDE_PROJECT_DIR in Claude Code's environment cannot stand in for it.
     const env = { CLAUDE_PROJECT_DIR: workspace }
-    const preview = resultJson(await $.process.run(['node', `${$.plugin.root}/setup-entry.js`, '--check', workspace], { cwd: workspace, env }))
+    const preview = resultJson(await $.process.run(['node', `${$.plugin.root}/setup-entry.js`, '--check', workspace], { cwd: workspace, env, timeoutMs: SETUP_TIMEOUT_MS }))
     const found = Array.isArray(preview.providers) ? preview.providers.filter((name: unknown) => typeof name === 'string') : []
     const anyInstalled = Array.isArray(preview.installed) && preview.installed.length > 0
     const names = found.length ? found.join(', ') : anyInstalled ? 'none ready' : 'none found'
@@ -207,7 +213,7 @@ async function confirmSetup($: any, preview: SetupPreview) {
     if (await $.session.cwd() !== preview.workspace) throw new Error('The project changed. Confirm it again with /fleet setup.')
     await closeTree()
     const result = resultJson(await $.process.run(['node', `${$.plugin.root}/setup-entry.js`, '--setup', preview.workspace],
-      { cwd: preview.workspace, env: preview.env, timeoutMs: 30000 }))
+      { cwd: preview.workspace, env: preview.env, timeoutMs: SETUP_TIMEOUT_MS }))
     if (result.setup !== 'ready' || result.workspace !== preview.workspace || result.tier !== 'standard' || typeof result.workers !== 'boolean') {
       throw new Error('Fleet setup returned an unexpected result; run /fleet setup again.')
     }
