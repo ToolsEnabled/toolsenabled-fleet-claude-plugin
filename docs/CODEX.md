@@ -3,7 +3,9 @@
 This package exposes Fleet's hook-independent core MCP on Linux x86_64 with
 Node.js >=22.19. It requires a **separate workers-off state root** and runs as
 actor `codex`. Workers, Claude typed commands, panes and lifecycle hooks are
-unavailable. The original Claude package is unchanged. This branch is a local
+unavailable. An explicit empty `codex-hooks.json` prevents discovery of the
+Claude hook file (the CLI tested here falls back to autodiscovery for `hooks: []`).
+The original Claude package is unchanged. This branch is a local
 marketplace candidate, not an OpenAI directory listing or approval.
 
 ```sh

@@ -18,7 +18,7 @@
       "executable": false
     },
     ".codex-plugin/plugin.json": {
-      "sha256": "85dedfe9d4635cd4c3ad83dac9a36ac648ac6b3651cc04073899120ed6f0e6a6",
+      "sha256": "a40f8ba6134f0c87d5dbc5f213f538efee2c7543db9df308870038a3325446bb",
       "executable": false
     },
     ".mcp.json": {
@@ -61,6 +61,10 @@
       "sha256": "7813b5fdb9fcbe9ecf3eafb23e63b01217fbad8df11af7110bb0be2f8072bc53",
       "executable": false
     },
+    "codex-hooks.json": {
+      "sha256": "78922a784ee78e9e50587e93628cd3b9d4dfbe49087adc4514e6781cea38cbb9",
+      "executable": false
+    },
     "codex-skills/fleet-core/SKILL.md": {
       "sha256": "16fe6272d71248a558aea9292cfb85bbdc5b8e0f69eefa9d1af384e85e7e2b57",
       "executable": false
@@ -70,7 +74,7 @@
       "executable": false
     },
     "docs/CODEX.md": {
-      "sha256": "fea03779a92a26da36c22f17ba8b29db8b8c1a0059bbdea2af90cd7e5729622c",
+      "sha256": "e748f9fd8c7891c7ec86348dfa8f1eefde63e2865f1a6ba965634bf6a691189c",
       "executable": false
     },
     "docs/INSTALL.md": {

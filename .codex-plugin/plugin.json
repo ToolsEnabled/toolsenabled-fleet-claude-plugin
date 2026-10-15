@@ -10,7 +10,7 @@
   "repository": "https://github.com/ToolsEnabled/toolsenabled-fleet-claude-plugin",
   "license": "MIT",
   "skills": "./codex-skills/",
-  "hooks": [],
+  "hooks": "./codex-hooks.json",
   "mcpServers": {
     "fleet": {
       "command": "node",
