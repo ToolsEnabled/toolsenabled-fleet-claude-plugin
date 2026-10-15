@@ -26,7 +26,7 @@
   },
   "interface": {
     "displayName": "ToolsEnabled Fleet",
-    "shortDescription": "Core coordination with workers disabled; Claude hooks and panes are not included.",
+    "shortDescription": "Coordinate local project work",
     "developerName": "ToolsEnabled, Inc.",
     "category": "Productivity",
     "capabilities": [
@@ -34,6 +34,9 @@
       "Write"
     ],
     "privacyPolicyURL": "https://github.com/ToolsEnabled/toolsenabled-fleet-claude-plugin/blob/openai-plugin/PRIVACY.md",
-    "termsOfServiceURL": "https://toolsenabled.ai/terms/"
+    "termsOfServiceURL": "https://toolsenabled.ai/terms/",
+    "longDescription": "Core coordination with workers disabled; Claude hooks and panes are not included.",
+    "websiteURL": "https://github.com/ToolsEnabled/toolsenabled-fleet-claude-plugin",
+    "supportURL": "https://github.com/ToolsEnabled/toolsenabled-fleet-claude-plugin/issues"
   }
 }

@@ -18,7 +18,7 @@
       "executable": false
     },
     ".codex-plugin/plugin.json": {
-      "sha256": "a40f8ba6134f0c87d5dbc5f213f538efee2c7543db9df308870038a3325446bb",
+      "sha256": "7d064643e2c42d5c76a5dfccefdd212ba0278079a64868207fd3a68d129b513b",
       "executable": false
     },
     ".mcp.json": {
@@ -58,7 +58,7 @@
       "executable": false
     },
     "codex-entry.js": {
-      "sha256": "7813b5fdb9fcbe9ecf3eafb23e63b01217fbad8df11af7110bb0be2f8072bc53",
+      "sha256": "0706f694d476bdb5a4451b448e9dc56cb75302c4c7cc497756a43a4218644b90",
       "executable": false
     },
     "codex-hooks.json": {
@@ -74,7 +74,7 @@
       "executable": false
     },
     "docs/CODEX.md": {
-      "sha256": "e748f9fd8c7891c7ec86348dfa8f1eefde63e2865f1a6ba965634bf6a691189c",
+      "sha256": "197044fa048fe2e1879db4a0a23d2f31be79b8eada92dd3975372cbf694d8860",
       "executable": false
     },
     "docs/INSTALL.md": {

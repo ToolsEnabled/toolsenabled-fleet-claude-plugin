@@ -4,7 +4,7 @@
 // Only a separately configured, workers-off core may be served here.
 const path = require('node:path');
 const { createInterface } = require('node:readline');
-const { inside } = require('./project-folder');
+const { realpathSync } = require('node:fs');
 const VERSION = require('./.claude-plugin/plugin.json').version;
 const INSTRUCTIONS = 'ToolsEnabled Fleet Codex core: workers, Claude typed commands, lifecycle hooks and panes are unavailable. Configure a separate workers-off state root with the documented terminal command. No setup, settings change or worker start is offered through this status connection.';
 
@@ -16,7 +16,7 @@ function coreConfig(env, readConfig) {
     throw new Error('FLEET_CODEX_CONFIG_REQUIRED: set both absolute TOOLSENABLED_FLEET_CODEX_STATE_ROOT and FLEET_CODEX_WORKSPACE.');
   const config = readConfig(stateRoot, { setupKind: 'plugin' });
   if (config.workers !== false) throw new Error('FLEET_CODEX_WORKERS_REFUSED: this Codex package requires a separate workers-off setup.');
-  if (!inside(workspace, config.workspace)) throw new Error('FLEET_CODEX_WORKSPACE_REFUSED: the requested workspace is outside the configured project.');
+  if (realpathSync(workspace) !== realpathSync(config.workspace)) throw new Error('FLEET_CODEX_WORKSPACE_REFUSED: select the exact configured project directory, not its child or parent.');
   return config;
 }
 

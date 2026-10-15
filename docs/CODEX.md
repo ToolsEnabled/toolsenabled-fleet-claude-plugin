@@ -26,7 +26,10 @@ export FLEET_CODEX_WORKSPACE=/absolute/project
 ```
 
 Restart Codex with those variables; the manifest forwards only these two to
-Fleet. The server verifies the saved private setup, workspace binding and
+Fleet. FLEET_CODEX_WORKSPACE must resolve to exactly the saved project directory.
+A child, parent or unrelated directory is refused; a symlink alias is accepted
+only when it resolves to the very same directory. The server verifies the saved
+private setup, exact workspace identity and
 `workers === false` before serving canonical tools. Never point this package at
 an existing workers-enabled state. To move to a new plugin cache after an
 upgrade, repeat the terminal setup against the **same separately owned state**;
