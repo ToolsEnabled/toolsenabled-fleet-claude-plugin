@@ -3,9 +3,9 @@
 Release notes for every version, with how each was tested, are on the
 [releases page](https://github.com/ToolsEnabled/toolsenabled-fleet-claude-plugin/releases).
 
-## 1.11.3 (2026-10-13)
+## 1.11.4 (2026-10-14)
 
-Fixes in the plugin and its bundled engine, and documentation.
+Fixes in the plugin and its bundled engine. The documentation changes prepared as 1.11.3 ship here; 1.11.3 was not released separately.
 
 - A large answer no longer stops Fleet. Reading a file of a few hundred kilobytes with `host.read_file` (about 450 KB
   of JavaScript, or about 330 KB of a quote-heavy file such as `package-lock.json`), well under its 2 MiB limit, made

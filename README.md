@@ -1,5 +1,7 @@
 # ToolsEnabled Fleet
 
+Current release: **1.11.4**. See the [changelog](CHANGELOG.md) for the fixes and documentation included.
+
 Fleet is a plugin that runs in Claude Code on Linux x86_64. It gives your Claude Code session a team: subagents that keep working in parallel, a shared task list, a ledger of your standing rules and open questions, and memory that every agent in the project can read. Subagents are real, separate agent sessions that you can watch, stop and resume, also in a later Claude Code session: they stop when your session ends and keep their conversations.
 
 ## Requirements
