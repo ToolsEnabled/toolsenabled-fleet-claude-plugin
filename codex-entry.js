@@ -47,11 +47,14 @@ function statusServer(input = process.stdin, output = process.stdout) {
   return new Promise(resolve => lines.once('close', resolve));
 }
 
-async function main({ env = process.env, readConfig, serve, status = statusServer } = {}) {
+async function main({ env = process.env, readConfig, serve, status = statusServer, enterWorkspace = process.chdir } = {}) {
   const runtime = require('./runtime/engine/src/lib/host-runtime');
   const config = coreConfig(env, readConfig || runtime.readHostConfig);
   if (!config) return status();
   require('./node-guard').assertSafeNode({ env, workspaces: [config.workspace] });
+  // Relative arguments must share the same project root as both canonical
+  // confinement and mediated-file checks, rather than the plugin cache cwd.
+  enterWorkspace(config.workspace);
   // All enforcement is in the canonical host server; no Claude bridge or hook
   // is loaded and the actor is the CLI actually making this connection.
   return (serve || runtime.serveHost)(config, { actor: 'codex' });
