@@ -206,3 +206,9 @@ Close sessions that use Fleet, then uninstall the plugin from Claude Code. To de
 [Privacy](https://github.com/ToolsEnabled/toolsenabled-fleet-claude-plugin/blob/main/PRIVACY.md) · [Security and safe harbor](https://github.com/ToolsEnabled/toolsenabled-fleet-claude-plugin/blob/main/SECURITY.md) · Support: support@toolsenabled.ai or [GitHub issues](https://github.com/ToolsEnabled/toolsenabled-fleet-claude-plugin/issues) · MIT licensed ([LICENSE](https://github.com/ToolsEnabled/toolsenabled-fleet-claude-plugin/blob/main/LICENSE)).
 
 ToolsEnabled is not affiliated with or endorsed by Anthropic, OpenAI or any other AI provider. Product names are used only to say which tools Fleet works with.
+
+## Codex plugin candidate (unreleased)
+
+See [Codex marketplace setup](docs/CODEX.md) for branch installation, supported scope,
+external data and current qualification limits. This self-distribution candidate
+is separate from OpenAI public-directory review.

@@ -1,0 +1,39 @@
+{
+  "name": "toolsenabled-fleet",
+  "version": "1.11.4",
+  "description": "Core coordination with workers disabled; Claude hooks and panes are not included.",
+  "author": {
+    "name": "ToolsEnabled, Inc.",
+    "email": "support@toolsenabled.ai"
+  },
+  "homepage": "https://toolsenabled.ai",
+  "repository": "https://github.com/ToolsEnabled/toolsenabled-fleet-claude-plugin",
+  "license": "MIT",
+  "skills": "./codex-skills/",
+  "hooks": [],
+  "mcpServers": {
+    "fleet": {
+      "command": "node",
+      "args": [
+        "./codex-entry.js"
+      ],
+      "cwd": "./",
+      "env_vars": [
+        "TOOLSENABLED_FLEET_CODEX_STATE_ROOT",
+        "FLEET_CODEX_WORKSPACE"
+      ]
+    }
+  },
+  "interface": {
+    "displayName": "ToolsEnabled Fleet",
+    "shortDescription": "Core coordination with workers disabled; Claude hooks and panes are not included.",
+    "developerName": "ToolsEnabled, Inc.",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "privacyPolicyURL": "https://github.com/ToolsEnabled/toolsenabled-fleet-claude-plugin/blob/openai-plugin/PRIVACY.md",
+    "termsOfServiceURL": "https://toolsenabled.ai/terms/"
+  }
+}

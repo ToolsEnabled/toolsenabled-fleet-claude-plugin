@@ -1,0 +1,20 @@
+{
+  "name": "toolsenabled-fleet-openai",
+  "interface": {
+    "displayName": "ToolsEnabled Fleet for Codex"
+  },
+  "plugins": [
+    {
+      "name": "toolsenabled-fleet",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
