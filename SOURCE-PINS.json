@@ -3,5 +3,5 @@
   "version": "1.11.4",
   "engineCommit": "c94665fef37067f3f77de84fb76d8f4308a116cf",
   "engineAllowlist": "installer/claude-plugin/SOURCE-ALLOWLIST",
-  "runtimeFiles": 175
+  "runtimeFiles": 176
 }

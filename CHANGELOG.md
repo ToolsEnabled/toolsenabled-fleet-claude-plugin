@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Freeze the reviewed Claude tool surface in the session bridge and inherited worker lists. Preserve workers, project coordination and existing permission limits.
+- Document source-distribution versus directory-submission requirements and remaining vendor questions.
+
+
 Release notes for every version, with how each was tested, are on the
 [releases page](https://github.com/ToolsEnabled/toolsenabled-fleet-claude-plugin/releases).
 

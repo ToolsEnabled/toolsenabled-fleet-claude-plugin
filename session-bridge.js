@@ -1,5 +1,6 @@
 'use strict';
 const path = require('node:path');
+const reviewedTools = new Set(require('./runtime/engine/src/lib/claude-plugin-policy.json').allowedTools);
 const { spawn } = require('node:child_process');
 const { launcherEnvironment } = require('./runtime-config');
 // Setup stays available after setup, so a person can move Fleet to another project.
@@ -55,7 +56,7 @@ function lineId(pattern, text) {
 
 // The canonical engine remains an unchanged child. Only the plugin's public,
 // read-only session and settings tools and the setup tool are added; every
-// other engine request/response is forwarded while Fleet serves this session's
+// other reviewed engine request/response is forwarded while Fleet serves this session's
 // project. After Fleet moves away, tool calls are refused here and never reach
 // the engine, which would act on the new project. With `preInitialized`, the client already
 // initialized with the setup server in this same session: the bridge
@@ -227,6 +228,10 @@ async function serveSession(config, { input = process.stdin, output = process.st
       send({ jsonrpc: '2.0', id: message.id, result });
       return;
     }
+    if (message?.method === 'tools/call' && !reviewedTools.has(message.params?.name)) {
+      if (Object.hasOwn(message, 'id')) send({ jsonrpc: '2.0', id: message.id, error: { code: -32601, message: 'This operation is outside the reviewed Claude plugin tool surface.' } });
+      return;
+    }
     if (initializing) { queued.push(message); return; }
     forward(message);
   }, { initial: initialBuffer, limit: requestHeld,
@@ -249,6 +254,7 @@ async function serveSession(config, { input = process.stdin, output = process.st
       message.result.capabilities = { ...capabilities, tools: { ...(capabilities.tools || {}), listChanged: true } };
     }
     if (lists.delete(JSON.stringify(message?.id)) && Array.isArray(message.result?.tools)) {
+      message.result.tools = message.result.tools.filter(tool => reviewedTools.has(tool.name));
       message.result.tools.push(...[sessionTool, setupTool, settingsTool].map(titled));
     }
     send(message);

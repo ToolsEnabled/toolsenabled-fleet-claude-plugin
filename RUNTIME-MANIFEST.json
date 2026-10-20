@@ -13,12 +13,16 @@
       "sha256": "bc975f97dcc376c89ad7617d7f6f668e2be7d5841708ad9d5c2bfeb369f43695",
       "executable": false
     },
+    ".github/workflows/plugin-policy.yml": {
+      "sha256": "037025110e2c30e66f7fc028f97eb54550ff96801def844499e3fec5b7767805",
+      "executable": false
+    },
     ".mcp.json": {
       "sha256": "b4de38004e7bef9be02eb57c1b1deb82503e3bf0ce809f08758b399ad167c625",
       "executable": false
     },
     "CHANGELOG.md": {
-      "sha256": "3d1458c21d43f50967ddd701f4d09fbd7a5b3b1be47be9ea67ec8519de91dff1",
+      "sha256": "4ac25dd7c0bc3326cfd1ca02dfc6425f1624e35995e9dcf01b9634a048b463d7",
       "executable": false
     },
     "LICENSE": {
@@ -26,7 +30,11 @@
       "executable": false
     },
     "LOCAL-PATCHES.json": {
-      "sha256": "ab6b78a08b766ea61aea2aaea76fc06c16bae9c2efd10590b0b7469baa986819",
+      "sha256": "17cc93f76a04cd667793caf375b76929948296ef2e2e2605466398d96f5d8106",
+      "executable": false
+    },
+    "PLUGIN-POLICY.md": {
+      "sha256": "a5652040fa1bcf9b3ef3fa642f8b36d8ca4a220c5dfe1ed194b7c6be2e21d709",
       "executable": false
     },
     "PRIVACY.md": {
@@ -34,7 +42,7 @@
       "executable": false
     },
     "README.md": {
-      "sha256": "ef31deda777040e3a655bd96b08452cc3f91e8ff5e8e544fabdb685be68a5c6e",
+      "sha256": "bb4f512853d978143dff1849e54db9b3a07f04196a5c705f2dc19fea9773e324",
       "executable": false
     },
     "RECOVERY.md": {
@@ -46,7 +54,7 @@
       "executable": false
     },
     "SOURCE-PINS.json": {
-      "sha256": "906cfaa3039437f0fa0c6b1b487a74b00f13eac27b9073988ee830d3cc7bae6c",
+      "sha256": "7d4db88b6ffc3ef4d7bc9a8041c955471065ee835c7ae19e8d14ea563ea5e688",
       "executable": false
     },
     "commands/tefleet.md": {
@@ -99,6 +107,10 @@
     },
     "node-guard.js": {
       "sha256": "ea00de75e588dd103700dcc19fc971533346493a2ef9ab32424b735a8d79dc15",
+      "executable": false
+    },
+    "plugin-policy.test.js": {
+      "sha256": "80d5c9593886f47f27a240e85f62999d162368a79b164d657692a12e08f2e27b",
       "executable": false
     },
     "project-folder.js": {
@@ -369,6 +381,10 @@
       "sha256": "0a6dd98114be909810f8947b004cd8b071e9b70af5fb5736f17499dbbaa66137",
       "executable": false
     },
+    "runtime/engine/src/lib/claude-plugin-policy.json": {
+      "sha256": "2ba753d057e15efa481e90ce3b50c56d96e259c39e447b55ebed9c2f3b5013b4",
+      "executable": false
+    },
     "runtime/engine/src/lib/claude-workspace-file-tools.js": {
       "sha256": "53846ac94aff49759882b9af4e79952e0a2349d0430720f70793f858a70e1046",
       "executable": false
@@ -486,7 +502,7 @@
       "executable": false
     },
     "runtime/engine/src/lib/host-surface.js": {
-      "sha256": "38053f85e384657640f94d00f324b28e2c65851bb7435cd7ad4423ded9126c52",
+      "sha256": "89bf09faf2aa23c209c624c0270017578311d10c73f256572a3b0259bd7fdfdc",
       "executable": false
     },
     "runtime/engine/src/lib/host-worker-prerequisite.js": {
@@ -830,7 +846,7 @@
       "executable": false
     },
     "session-bridge.js": {
-      "sha256": "d154251ce8b513f8fa95820d2037de57daf0a1f34f0e0d57069e91bbb54ea7a4",
+      "sha256": "025c192b15eb7622bcd6baed7644e59a8f9f6e77b768d3cae0391fb0689dbbf4",
       "executable": false
     },
     "settings-entry.js": {
@@ -846,11 +862,11 @@
       "executable": false
     },
     "setup-server.js": {
-      "sha256": "aa62f43977e13c9171966ab03720af32143f1c42b65ff82ea72f34aced0320d4",
+      "sha256": "3f602c8448dd51206b5c9b660ba3628551c18e28dc60430efb7ad516136669a9",
       "executable": false
     },
     "skills/toolsenabled-fleet/SKILL.md": {
-      "sha256": "9da87408f4b3fa924ac7f6622f577aac74fdd77a5f2642769ab67442e122da64",
+      "sha256": "b2b327e50fa05fc18d51340108d259875959afc6cfbb64668a6e4c965e7623a6",
       "executable": false
     },
     "startup-env.json": {
