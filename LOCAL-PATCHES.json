@@ -1,5 +1,14 @@
 {
   "schemaVersion": 1,
   "engineCommit": "c94665fef37067f3f77de84fb76d8f4308a116cf",
-  "patches": []
+  "patches": [
+    {
+      "id": "anthropic-plugin-surface-ceiling",
+      "files": [
+        "src/lib/host-surface.js",
+        "src/lib/claude-plugin-policy.json"
+      ],
+      "reason": "Intersect the host and inherited worker tool lists with the independently reviewed Claude distribution policy. No worker permission widening."
+    }
+  ]
 }

@@ -20,7 +20,7 @@ const statusTool = Object.freeze({
 });
 const setupTool = Object.freeze({
   name: 'fleet_setup', title: 'Set up Fleet for a project',
-  description: 'Set up Fleet for this session\'s project folder when the person asks for it. Creates Fleet\'s private state folder (~/.toolsenabled-fleet-plugin by default) at the Standard permission level and records the project folder. Accepts only the folder this session works in, or a folder above it inside the home folder. Refuses a folder that does not exist, a version-control, CI, git-hook, package, Python environment or tool settings folder such as .git, .github, .husky, node_modules, .venv, .claude, .codex, .opencode or .vscode or anything inside one, a dot folder of the home folder, ~/bin and any folder on the person\'s PATH or inside one. Turns on subagents for each installed agent CLI that passes its check: its own sign-in status command or, for a CLI that speaks the Agent Client Protocol, that protocol\'s initialize request. Does not change Claude Code settings, other projects, or any sign-in.',
+  description: 'Set up Fleet for this session\'s project folder when the person asks for it. Creates Fleet\'s private state folder (~/.toolsenabled-fleet-plugin by default) at the Standard permission level and records the project folder. Accepts only the folder this session works in, or a folder above it inside the home folder. Refuses a folder that does not exist, a version-control, CI, git-hook, package, Python environment or tool settings folder such as .git, .github, .husky, node_modules, .venv, .claude, .codex, .opencode or .vscode or anything inside one, a dot folder of the home folder, ~/bin and any folder on the person\'s PATH or inside one. Turns on subagents for each installed agent CLI that passes its check: its own sign-in status command or, for a CLI that speaks the Agent Client Protocol, that protocol\'s initialize request. Replaces the saved project binding if already set up; the previous project loses Fleet tool access. Sign-in checks may contact the selected CLI providers. Does not change Claude Code settings, project files, or any sign-in.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -30,7 +30,7 @@ const setupTool = Object.freeze({
     },
     required: ['workspace'], additionalProperties: false,
   },
-  annotations: { title: 'Set up Fleet for a project', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: { title: 'Set up Fleet for a project', readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
 });
 
 function text(value, isError = false) {
